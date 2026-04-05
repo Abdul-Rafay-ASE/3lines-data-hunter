@@ -829,58 +829,95 @@ def row_is_blacklisted(row_dict, blacklist):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 import subprocess as _sp
 
-def _search_system(name):
-    """Search entire system for a binary."""
+def _auto_install_chrome():
+    """Auto-download Chrome for Testing if not found on system."""
+    home = os.path.expanduser("~")
+    chrome_dir = os.path.join(home, ".chrome-for-testing")
+    chrome_bin = os.path.join(chrome_dir, "chrome-linux64", "chrome")
+    driver_bin = os.path.join(chrome_dir, "chromedriver-linux64", "chromedriver")
+
+    if os.path.isfile(chrome_bin) and os.path.isfile(driver_bin):
+        return chrome_bin, driver_bin
+
+    os.makedirs(chrome_dir, exist_ok=True)
+
+    # Get latest stable version
+    import urllib.request
     try:
-        r = _sp.run(["which", name], capture_output=True, text=True, timeout=5)
-        if r.returncode == 0 and r.stdout.strip():
-            return r.stdout.strip()
-    except Exception: pass
-    try:
-        r = _sp.run(["find", "/usr", "-name", name, "-type", "f"], capture_output=True, text=True, timeout=10)
-        if r.stdout.strip():
-            return r.stdout.strip().split("\n")[0]
-    except Exception: pass
-    return None
+        ver_url = "https://googlechromelabs.github.io/chrome-for-testing/LATEST_VERSIONS_PER_MILESTONE_WITH_DOWNLOADS.json"
+        with urllib.request.urlopen(ver_url, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+
+        # Find latest milestone
+        milestones = sorted(data["milestones"].keys(), key=int, reverse=True)
+        for ms in milestones:
+            ms_data = data["milestones"][ms]
+            chrome_url = None
+            driver_url = None
+            for d in ms_data.get("downloads", {}).get("chrome", []):
+                if d["platform"] == "linux64":
+                    chrome_url = d["url"]
+                    break
+            for d in ms_data.get("downloads", {}).get("chromedriver", []):
+                if d["platform"] == "linux64":
+                    driver_url = d["url"]
+                    break
+            if chrome_url and driver_url:
+                break
+
+        if not chrome_url or not driver_url:
+            return None, None
+
+        # Download and extract Chrome
+        chrome_zip = os.path.join(chrome_dir, "chrome.zip")
+        urllib.request.urlretrieve(chrome_url, chrome_zip)
+        _sp.run(["unzip", "-o", "-q", chrome_zip, "-d", chrome_dir], timeout=60)
+        os.remove(chrome_zip)
+
+        # Download and extract ChromeDriver
+        driver_zip = os.path.join(chrome_dir, "driver.zip")
+        urllib.request.urlretrieve(driver_url, driver_zip)
+        _sp.run(["unzip", "-o", "-q", driver_zip, "-d", chrome_dir], timeout=60)
+        os.remove(driver_zip)
+
+        # Make executable
+        if os.path.isfile(chrome_bin):
+            os.chmod(chrome_bin, 0o755)
+        if os.path.isfile(driver_bin):
+            os.chmod(driver_bin, 0o755)
+
+        if os.path.isfile(chrome_bin) and os.path.isfile(driver_bin):
+            return chrome_bin, driver_bin
+    except Exception:
+        pass
+    return None, None
 
 def _find_binary():
-    paths = [
-        "/usr/bin/chromium", "/usr/bin/chromium-browser",
-        "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
-        "/usr/lib/chromium/chromium", "/snap/bin/chromium",
-        "/usr/lib/chromium-browser/chromium-browser",
-    ]
-    for p in paths:
+    for p in ["/usr/bin/chromium", "/usr/bin/chromium-browser",
+              "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
+              "/usr/lib/chromium/chromium"]:
         if os.path.isfile(p): return p
     for name in ["chromium", "chromium-browser", "google-chrome"]:
         found = shutil.which(name)
-        if found: return found
-    return _search_system("chromium") or _search_system("chromium-browser")
+        if found and "completion" not in found: return found
+    return None
 
 def _find_driver():
-    paths = [
-        "/usr/bin/chromedriver",
-        "/usr/lib/chromium/chromedriver",
-        "/usr/lib/chromium-browser/chromedriver",
-        "/snap/bin/chromedriver",
-    ]
-    for p in paths:
+    for p in ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver",
+              "/usr/lib/chromium-browser/chromedriver"]:
         if os.path.isfile(p): return p
-    found = shutil.which("chromedriver")
-    if found: return found
-    return _search_system("chromedriver")
+    return shutil.which("chromedriver")
 
+# Try system first, then auto-download
 _CHROME_BIN = _find_binary()
 _CHROME_DRV = _find_driver()
 
-# Debug: list what's installed
-_CHROME_DEBUG = ""
-try:
-    r = _sp.run(["dpkg", "-l"], capture_output=True, text=True, timeout=10)
-    lines = [l for l in r.stdout.split("\n") if "chrom" in l.lower()]
-    _CHROME_DEBUG = " | ".join([l.split()[1] for l in lines if len(l.split())>1]) if lines else "No chromium packages"
-except Exception:
-    _CHROME_DEBUG = "Cannot check"
+if not _CHROME_BIN or not _CHROME_DRV:
+    _auto_bin, _auto_drv = _auto_install_chrome()
+    if not _CHROME_BIN and _auto_bin: _CHROME_BIN = _auto_bin
+    if not _CHROME_DRV and _auto_drv: _CHROME_DRV = _auto_drv
+
+_CHROME_DEBUG = f"Binary: {_CHROME_BIN or 'None'} | Driver: {_CHROME_DRV or 'None'}"
 
 def make_driver():
     opts = Options()
