@@ -828,33 +828,55 @@ def row_is_blacklisted(row_dict, blacklist):
 #  CHROMIUM / DRIVER
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def _find_binary():
-    for p in ["/usr/bin/chromium", "/usr/bin/chromium-browser",
-              "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"]:
+    paths = [
+        "/usr/bin/chromium", "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
+        "/usr/lib/chromium/chromium",
+        "/snap/bin/chromium",
+    ]
+    for p in paths:
         if os.path.isfile(p): return p
-    return shutil.which("chromium") or shutil.which("google-chrome")
+    found = shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome")
+    return found
 
 def _find_driver():
-    for p in ["/usr/bin/chromedriver", "/usr/lib/chromium/chromedriver",
-              "/usr/lib/chromium-browser/chromedriver"]:
+    paths = [
+        "/usr/bin/chromedriver",
+        "/usr/lib/chromium/chromedriver",
+        "/usr/lib/chromium-browser/chromedriver",
+        "/usr/lib/chromium/chrome-sandbox/../chromedriver",
+        "/snap/bin/chromedriver",
+    ]
+    for p in paths:
         if os.path.isfile(p): return p
-    return shutil.which("chromedriver")
+    found = shutil.which("chromedriver")
+    return found
+
+# Log detected paths at startup for debugging
+_CHROME_BIN = _find_binary()
+_CHROME_DRV = _find_driver()
 
 def make_driver():
     opts = Options()
     for flag in ["--headless=new", "--no-sandbox", "--disable-dev-shm-usage",
                  "--disable-gpu", "--disable-extensions", "--disable-notifications",
                  "--disable-popup-blocking", "--log-level=3", "--window-size=1200,800",
-                 "--disable-software-rasterizer"]:
+                 "--disable-software-rasterizer", "--disable-background-networking",
+                 "--disable-default-apps", "--disable-sync", "--disable-translate",
+                 "--metrics-recording-only", "--no-first-run"]:
         opts.add_argument(flag)
     if os.name != "nt":
         opts.add_argument("--single-process")
         opts.add_argument("--no-zygote")
+        opts.add_argument("--disable-setuid-sandbox")
     opts.add_experimental_option('excludeSwitches', ['enable-logging'])
     opts.page_load_strategy = 'eager'
-    chrome_bin = _find_binary()
-    if chrome_bin: opts.binary_location = chrome_bin
-    driver_path = _find_driver()
-    drv = webdriver.Chrome(service=Service(driver_path), options=opts) if driver_path else webdriver.Chrome(options=opts)
+    if _CHROME_BIN:
+        opts.binary_location = _CHROME_BIN
+    if _CHROME_DRV:
+        drv = webdriver.Chrome(service=Service(_CHROME_DRV), options=opts)
+    else:
+        drv = webdriver.Chrome(options=opts)
     drv.set_page_load_timeout(45)
     drv.set_script_timeout(20)
     drv.implicitly_wait(8)
@@ -1602,7 +1624,9 @@ with tab_settings:
     st.markdown('<div class="sec">System Status</div>',unsafe_allow_html=True)
     st.markdown(f'''
     <div class="stat-grid">
-        <div class="stat-cell"><span class="sl">Browser Engine</span><span class="sv" style="color:{_green2 if SELENIUM_OK else _red2}!important">{"Ready" if SELENIUM_OK else "Not Found"}</span></div>
+        <div class="stat-cell"><span class="sl">Selenium</span><span class="sv" style="color:{_green2 if SELENIUM_OK else _red2}!important">{"Ready" if SELENIUM_OK else "Not Found"}</span></div>
+        <div class="stat-cell"><span class="sl">Chrome Binary</span><span class="sv" style="color:{_green2 if _CHROME_BIN else _red2}!important">{_CHROME_BIN or "Not Found"}</span></div>
+        <div class="stat-cell"><span class="sl">ChromeDriver</span><span class="sv" style="color:{_green2 if _CHROME_DRV else _red2}!important">{_CHROME_DRV or "Not Found"}</span></div>
         <div class="stat-cell"><span class="sl">Hosting</span><span class="sv">Streamlit Cloud</span></div>
     </div>
     ''',unsafe_allow_html=True)
