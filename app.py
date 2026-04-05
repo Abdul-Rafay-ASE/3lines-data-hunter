@@ -1,5 +1,5 @@
 """
-3LINES DataHunter v15.0 - Elite Edition
+3LINES DataHunter v16.0 - Elite Edition
 Dynamic hardware inspection: Available RAM + Live CPU Load via psutil.
 Safe Bots = Available_RAM / 0.6 GB per bot, halved if CPU > 70%.
 Features: Run History, Multi-Format Export, Performance Chart,
@@ -465,8 +465,12 @@ section[data-testid="stSidebar"], #MainMenu, footer, header {{ display: none !im
     border-color: {_accent};
 }}
 .step-card.active {{
+    border-color: {_accent};
+    box-shadow: 0 0 20px rgba(59,130,246,0.15);
+}}
+.step-card.done {{
     border-color: {_green};
-    box-shadow: 0 0 20px rgba(16,185,129,0.15);
+    box-shadow: 0 0 15px rgba(16,185,129,0.12);
 }}
 .step-num {{
     display: inline-flex; align-items: center; justify-content: center;
@@ -1209,13 +1213,14 @@ ss = st.session_state
 st.markdown(f'''
 <div class="elite-header">
     <div class="eh-brand">
+        <img src="https://3lines.com.sa/assets/logos/logo.png" height="32" style="filter:brightness(1.2);margin-right:4px;" onerror="this.style.display='none'">
         <div class="eh-logo">3LINES <b>DataHunter</b></div>
         <div class="eh-sep"></div>
         <div class="eh-sub">Automated Data Collection &mdash; Smart Filtering &mdash; One-Click Export</div>
     </div>
     <div class="eh-right">
         <div class="eh-pill"><div class="dot"></div>RAM {AVAILABLE_GB}GB &bull; CPU {CPU_LOAD}% &bull; {SMART_LIMIT} Bots</div>
-        <div class="eh-ver">v15.0</div>
+        <div class="eh-ver">v16.0</div>
     </div>
 </div>
 ''', unsafe_allow_html=True)
@@ -1239,29 +1244,35 @@ with tab_scraper:
 
     # Step indicators at the top
     has_file = ss.get("file_bytes") is not None or ss.completed
-    step1_done = has_file
-    step2_done = has_file  # config is always available once file uploaded
-    step3_active = ss.running
+    s1_done = has_file
+    s3_active = ss.running
+    s3_done = ss.completed
+
+    s1_cls = "done" if s1_done else "active"
+    s2_cls = "done" if s1_done else ""
+    s3_cls = "done" if s3_done else ("active" if s3_active else "")
 
     st.markdown(f'''
-    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
-        <div class="step-card {'active' if not step1_done else ''}" style="animation-delay: 0.1s;">
-            <span class="step-num {'done' if step1_done else ''}">1</span>
-            <span class="step-icon">&#128194;</span>
-            <div class="step-title">Upload Your File</div>
-            <div class="step-desc">Drop your Excel file with stock numbers in Column A</div>
+    <div style="display:flex; align-items:flex-start; gap:0; margin-bottom:1.5rem; position:relative;">
+        <div class="step-card {s1_cls}" style="flex:1; animation: fadeInUp 0.4s ease-out;">
+            <span class="step-num {'done' if s1_done else ''}">{'&#10003;' if s1_done else '1'}</span>
+            <span class="step-icon">&#128196;</span>
+            <div class="step-title">Upload File</div>
+            <div class="step-desc">Excel file with stock numbers</div>
         </div>
-        <div class="step-card {'active' if step1_done and not step3_active else ''}" style="animation-delay: 0.2s;">
-            <span class="step-num {'done' if step2_done else ''}">2</span>
-            <span class="step-icon">&#9881;&#65039;</span>
+        <div style="display:flex;align-items:center;padding-top:2.5rem;color:{_muted};font-size:1.5rem;margin:0 -0.3rem;">&#10132;</div>
+        <div class="step-card {s2_cls}" style="flex:1; animation: fadeInUp 0.5s ease-out;">
+            <span class="step-num {'done' if s1_done else ''}">{'&#10003;' if s1_done else '2'}</span>
+            <span class="step-icon">&#9889;</span>
             <div class="step-title">Choose Speed</div>
-            <div class="step-desc">Pick how fast you want the search to run</div>
+            <div class="step-desc">Select search speed</div>
         </div>
-        <div class="step-card {'active' if step3_active else ''}" style="animation-delay: 0.3s;">
-            <span class="step-num {'done' if ss.completed else ''}">3</span>
-            <span class="step-icon">&#9654;&#65039;</span>
-            <div class="step-title">Start Search</div>
-            <div class="step-desc">Hit the big green button and watch results come in</div>
+        <div style="display:flex;align-items:center;padding-top:2.5rem;color:{_muted};font-size:1.5rem;margin:0 -0.3rem;">&#10132;</div>
+        <div class="step-card {s3_cls}" style="flex:1; animation: fadeInUp 0.6s ease-out;">
+            <span class="step-num {'done' if s3_done else ''}">{'&#10003;' if s3_done else '3'}</span>
+            <span class="step-icon">&#128640;</span>
+            <div class="step-title">Start & Download</div>
+            <div class="step-desc">Run search & get results</div>
         </div>
     </div>
     ''', unsafe_allow_html=True)
@@ -1269,14 +1280,14 @@ with tab_scraper:
     # ── Step 1: Upload & Config ──
     st.markdown('<div class="sec">Step 1 - Upload &amp; Configure</div>', unsafe_allow_html=True)
 
-    cu, cf = st.columns([2, 1])
+    cu, cf, cn = st.columns([2, 1, 1])
     with cu:
         target_url = st.text_input("Target Website URL", value=DEFAULT_URL)
     with cf:
+        uploaded_file = st.file_uploader("Upload Excel", type=["xlsx","xls"])
+    with cn:
         custom_name = st.text_input("Save File As:", value="3LINES_Results")
         ss.custom_name = custom_name
-
-    uploaded_file = st.file_uploader("Upload your Excel file (.xlsx or .xls)", type=["xlsx","xls"])
 
     with st.expander("Advanced Settings (Priority & Blacklist)", expanded=False):
         f1, f2 = st.columns(2)
@@ -1308,22 +1319,27 @@ with tab_scraper:
         safe_bots = max(SMART_LIMIT, 1)
         medium_bots = min(safe_bots+5, 15)
         if medium_bots <= safe_bots: medium_bots = safe_bots+2
-        spm = {"slow":{"b":1,"l":"Slow","i":"Careful","d":"1 bot - safest"}, "safe":{"b":safe_bots,"l":"Safe","i":"Recommended","d":f"{safe_bots} bots - balanced"},
-               "medium":{"b":medium_bots,"l":"Medium","i":"Faster","d":f"{medium_bots} bots - quicker"}, "fast":{"b":20,"l":"Fast","i":"Maximum","d":"20 bots - fastest"}}
+        spm = {
+            "slow":   {"b":1,           "l":"Careful",     "e":"\U0001f422", "d":"Safest option"},
+            "safe":   {"b":safe_bots,   "l":"Recommended", "e":"\U0001f6e1\ufe0f",  "d":"Best balance"},
+            "medium": {"b":medium_bots, "l":"Faster",      "e":"\u26a1",     "d":"Quicker results"},
+            "fast":   {"b":20,          "l":"Maximum",     "e":"\U0001f680", "d":"Full speed"},
+        }
         s1,s2,s3,s4 = st.columns(4)
         for col,mk in zip([s1,s2,s3,s4],["slow","safe","medium","fast"]):
-            m = spm[mk]; sel = mk==ss.speed_mode; rec = " (Best)" if mk=="safe" else ""
-            chk = ">> " if sel else ""
+            m = spm[mk]; sel = mk==ss.speed_mode
+            best = " *" if mk=="safe" else ""
+            check = "\u2705 " if sel else ""
             with col:
-                if st.button(f"{chk}{m['i']}{rec}\n{m['l']} - {m['b']} bot{'s' if m['b']>1 else ''}",
+                if st.button(f"{check}{m['e']} {m['l']}{best}\n{m['b']} bot{'s' if m['b']>1 else ''} - {m['d']}",
                              key=f"sp_{mk}", use_container_width=True,
                              type="primary" if sel else "secondary"):
                     ss.speed_mode=mk; ss.num_bots=m["b"]; st.rerun()
         num_bots = ss.num_bots; sm = spm[ss.speed_mode]
-        st.markdown(f'<div class="apbox"><span class="apt">Selected: {sm["l"]} ({sm["b"]} bot{"s" if sm["b"]>1 else ""})</span><br>'
-                    f'<span class="apd">RAM: {AVAILABLE_GB}GB | CPU: {CPU_LOAD}% | Safe limit: {SMART_LIMIT}</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="apbox"><span class="apt">{sm["e"]} {sm["l"]} Mode Active ({sm["b"]} bot{"s" if sm["b"]>1 else ""})</span><br>'
+                    f'<span class="apd">RAM: {AVAILABLE_GB}GB | CPU: {CPU_LOAD}% | Safe Limit: {SMART_LIMIT} bots</span></div>', unsafe_allow_html=True)
         if num_bots > SMART_LIMIT:
-            st.markdown(f'<div class="ramalert">Warning: Safe limit is {SMART_LIMIT} bots. Running {num_bots} may slow your computer.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="ramalert">\u26a0\ufe0f Safe limit is {SMART_LIMIT} bots based on your RAM. Using {num_bots} bots may slow your computer.</div>', unsafe_allow_html=True)
 
         # ── Step 3: Controls ──
         st.markdown('<div class="sec">Step 3 - Start Search</div>', unsafe_allow_html=True)
@@ -1371,9 +1387,12 @@ with tab_scraper:
 
     elif not ss.completed:
         st.markdown(f'''<div class="upload-placeholder">
-            <div class="up-icon">&#128194;</div>
-            <div class="up-title">Upload an Excel File to Begin</div>
-            <div class="up-sub">Drag and drop or click the upload button above<br>Accepts .xlsx and .xls files &mdash; stock numbers should be in Column A starting from Row 2</div>
+            <div class="up-icon">&#128196; &#10132; &#128194;</div>
+            <div class="up-title">Upload Your Excel File</div>
+            <div class="up-sub">
+                Click <b>"Browse files"</b> above or drag & drop your file here<br>
+                <span style="color:{_accent2}!important;">Supported: .xlsx and .xls</span> &mdash; Stock numbers in Column A, starting from Row 2
+            </div>
         </div>''', unsafe_allow_html=True)
 
     # ── Completion ──
@@ -1575,7 +1594,7 @@ with tab_settings:
         border:1px solid {_glass_border}; border-radius:16px;">
         <div style="font-size:1.6rem; font-weight:900; margin-bottom:0.5rem;">3LINES DataHunter</div>
         <div style="font-size:0.82rem; color:{_muted}!important; line-height:1.8;">
-            v15.0 Elite Edition<br>
+            v16.0 Elite Edition<br>
             Smart Filtering &bull; Auto-Retry &bull; Multi-Format Export<br>
             Priority Targets &bull; Blacklist Exclusion &bull; Auto-Save
         </div>
@@ -1583,4 +1602,4 @@ with tab_settings:
 
 
 # ── Footer ──
-st.markdown(f'<div class="footer">3LINES DataHunter v15.0 &mdash; Automated Data Collection &bull; Smart Filtering &bull; One-Click Export</div>',unsafe_allow_html=True)
+st.markdown(f'<div class="footer">3LINES DataHunter v16.0 &mdash; Automated Data Collection &bull; Smart Filtering &bull; One-Click Export</div>',unsafe_allow_html=True)
