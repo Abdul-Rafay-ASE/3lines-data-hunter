@@ -773,7 +773,7 @@ div[data-testid="stDownloadButton"] button p {{ color: #fff !important; }}
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CONSTANTS & EXCEL STYLES
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DEFAULT_URL = ""
+DEFAULT_URL = "https://www.lqlite.com"
 STATIC_BLACKLIST = ["A486G", "FINLAND"]
 AUTOSAVE_INTERVAL = 50
 MINUTES_PER_ITEM_MANUAL = 2
