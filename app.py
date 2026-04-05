@@ -827,34 +827,60 @@ def row_is_blacklisted(row_dict, blacklist):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CHROMIUM / DRIVER
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+import subprocess as _sp
+
+def _search_system(name):
+    """Search entire system for a binary."""
+    try:
+        r = _sp.run(["which", name], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except Exception: pass
+    try:
+        r = _sp.run(["find", "/usr", "-name", name, "-type", "f"], capture_output=True, text=True, timeout=10)
+        if r.stdout.strip():
+            return r.stdout.strip().split("\n")[0]
+    except Exception: pass
+    return None
+
 def _find_binary():
     paths = [
         "/usr/bin/chromium", "/usr/bin/chromium-browser",
         "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
-        "/usr/lib/chromium/chromium",
-        "/snap/bin/chromium",
+        "/usr/lib/chromium/chromium", "/snap/bin/chromium",
+        "/usr/lib/chromium-browser/chromium-browser",
     ]
     for p in paths:
         if os.path.isfile(p): return p
-    found = shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome")
-    return found
+    for name in ["chromium", "chromium-browser", "google-chrome"]:
+        found = shutil.which(name)
+        if found: return found
+    return _search_system("chromium") or _search_system("chromium-browser")
 
 def _find_driver():
     paths = [
         "/usr/bin/chromedriver",
         "/usr/lib/chromium/chromedriver",
         "/usr/lib/chromium-browser/chromedriver",
-        "/usr/lib/chromium/chrome-sandbox/../chromedriver",
         "/snap/bin/chromedriver",
     ]
     for p in paths:
         if os.path.isfile(p): return p
     found = shutil.which("chromedriver")
-    return found
+    if found: return found
+    return _search_system("chromedriver")
 
-# Log detected paths at startup for debugging
 _CHROME_BIN = _find_binary()
 _CHROME_DRV = _find_driver()
+
+# Debug: list what's installed
+_CHROME_DEBUG = ""
+try:
+    r = _sp.run(["dpkg", "-l"], capture_output=True, text=True, timeout=10)
+    lines = [l for l in r.stdout.split("\n") if "chrom" in l.lower()]
+    _CHROME_DEBUG = " | ".join([l.split()[1] for l in lines if len(l.split())>1]) if lines else "No chromium packages"
+except Exception:
+    _CHROME_DEBUG = "Cannot check"
 
 def make_driver():
     opts = Options()
@@ -1627,6 +1653,7 @@ with tab_settings:
         <div class="stat-cell"><span class="sl">Selenium</span><span class="sv" style="color:{_green2 if SELENIUM_OK else _red2}!important">{"Ready" if SELENIUM_OK else "Not Found"}</span></div>
         <div class="stat-cell"><span class="sl">Chrome Binary</span><span class="sv" style="color:{_green2 if _CHROME_BIN else _red2}!important">{_CHROME_BIN or "Not Found"}</span></div>
         <div class="stat-cell"><span class="sl">ChromeDriver</span><span class="sv" style="color:{_green2 if _CHROME_DRV else _red2}!important">{_CHROME_DRV or "Not Found"}</span></div>
+        <div class="stat-cell"><span class="sl">Installed Packages</span><span class="sv" style="font-size:0.65rem">{_CHROME_DEBUG}</span></div>
         <div class="stat-cell"><span class="sl">Hosting</span><span class="sv">Streamlit Cloud</span></div>
     </div>
     ''',unsafe_allow_html=True)
