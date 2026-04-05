@@ -181,7 +181,7 @@ def get_system_status():
     else:
         available_gb, total_gb, cpu_load = 4.0, 4.0, 0.0
         cpu_cores = os.cpu_count() or 2
-    safe_bots = max(1, int(available_gb / 0.6))
+    safe_bots = max(1, min(int(available_gb / 0.6), 10))
     if cpu_load > 70:
         safe_bots = max(1, safe_bots // 2)
     return {"available_gb": available_gb, "total_gb": total_gb,
@@ -1329,10 +1329,10 @@ with tab_scraper:
         medium_bots = min(safe_bots+5, 15)
         if medium_bots <= safe_bots: medium_bots = safe_bots+2
         spm = {
-            "slow":   {"b":1,           "l":"Careful",     "e":"\U0001f422", "d":"Safest option"},
+            "slow":   {"b":1,           "l":"Careful",     "e":"\U0001f422", "d":"1 bot only"},
             "safe":   {"b":safe_bots,   "l":"Recommended", "e":"\U0001f6e1\ufe0f",  "d":"Best balance"},
             "medium": {"b":medium_bots, "l":"Faster",      "e":"\u26a1",     "d":"Quicker results"},
-            "fast":   {"b":20,          "l":"Maximum",     "e":"\U0001f680", "d":"Full speed"},
+            "fast":   {"b":15,          "l":"Maximum",     "e":"\U0001f680", "d":"Full power"},
         }
         s1,s2,s3,s4 = st.columns(4)
         for col,mk in zip([s1,s2,s3,s4],["slow","safe","medium","fast"]):
@@ -1345,10 +1345,8 @@ with tab_scraper:
                              type="primary" if sel else "secondary"):
                     ss.speed_mode=mk; ss.num_bots=m["b"]; st.rerun()
         num_bots = ss.num_bots; sm = spm[ss.speed_mode]
-        st.markdown(f'<div class="apbox"><span class="apt">{sm["e"]} {sm["l"]} Mode Active ({sm["b"]} bot{"s" if sm["b"]>1 else ""})</span><br>'
-                    f'<span class="apd">RAM: {AVAILABLE_GB}GB | CPU: {CPU_LOAD}% | Safe Limit: {SMART_LIMIT} bots</span></div>', unsafe_allow_html=True)
-        if num_bots > SMART_LIMIT:
-            st.markdown(f'<div class="ramalert">\u26a0\ufe0f Safe limit is {SMART_LIMIT} bots based on your RAM. Using {num_bots} bots may slow your computer.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="apbox"><span class="apt">{sm["e"]} {sm["l"]} Mode &mdash; {sm["b"]} bot{"s" if sm["b"]>1 else ""}</span><br>'
+                    f'<span class="apd">{sm["d"]}</span></div>', unsafe_allow_html=True)
 
         # ── Step 3: Controls ──
         st.markdown('<div class="sec">Step 3 - Start Search</div>', unsafe_allow_html=True)
