@@ -1228,7 +1228,7 @@ st.markdown(f'''
         <div class="eh-sub">Automated Data Collection &mdash; Smart Filtering &mdash; One-Click Export</div>
     </div>
     <div class="eh-right">
-        <div class="eh-pill"><div class="dot"></div>Server: {AVAILABLE_GB}GB Free &bull; {CPU_CORES} Cores &bull; {SMART_LIMIT} Safe Bots</div>
+        <div class="eh-pill"><div class="dot"></div>Online</div>
         <div class="eh-ver">v16.0</div>
     </div>
 </div>
@@ -1481,42 +1481,6 @@ with tab_dashboard:
     d3.markdown(rmetric("Priority Found", f"{stats['total_priority']:,}", "p"), unsafe_allow_html=True)
     d4.markdown(rmetric("Total Errors", f"{stats['total_errors']:,}", "r"), unsafe_allow_html=True)
 
-    st.markdown('<div class="sec">Server Resources</div>', unsafe_allow_html=True)
-    ram_pct = round(((TOTAL_GB-AVAILABLE_GB)/TOTAL_GB)*100) if TOTAL_GB>0 else 0
-    cpu_color = _red2 if CPU_LOAD>80 else (_yellow2 if CPU_LOAD>60 else _green2)
-    ram_color = _red2 if ram_pct>80 else (_yellow2 if ram_pct>60 else _green2)
-
-    h1, h2, h3 = st.columns(3)
-    with h1:
-        st.markdown(f'''<div class="stat-cell" style="flex-direction:column; align-items:stretch;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span class="sl">CPU Usage</span><span class="sv" style="color:{cpu_color}!important">{CPU_LOAD}%</span>
-            </div>
-            <div class="health-bar-track"><div class="health-bar-fill" style="width:{min(CPU_LOAD,100)}%; background:linear-gradient(90deg,{_green},{cpu_color});"></div></div>
-        </div>''', unsafe_allow_html=True)
-    with h2:
-        st.markdown(f'''<div class="stat-cell" style="flex-direction:column; align-items:stretch;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span class="sl">RAM Usage</span><span class="sv" style="color:{ram_color}!important">{ram_pct}%</span>
-            </div>
-            <div class="health-bar-track"><div class="health-bar-fill" style="width:{min(ram_pct,100)}%; background:linear-gradient(90deg,{_green},{ram_color});"></div></div>
-        </div>''', unsafe_allow_html=True)
-    with h3:
-        st.markdown(f'''<div class="stat-cell" style="flex-direction:column; align-items:stretch;">
-            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span class="sl">Bot Capacity</span><span class="sv cv-green">{SMART_LIMIT} bots</span>
-            </div>
-            <div class="health-bar-track"><div class="health-bar-fill" style="width:{min(SMART_LIMIT*5,100)}%; background:linear-gradient(90deg,{_accent},{_green});"></div></div>
-        </div>''', unsafe_allow_html=True)
-
-    st.markdown(f'''
-    <div class="stat-grid">
-        <div class="stat-cell"><span class="sl">Available RAM</span><span class="sv">{AVAILABLE_GB} GB</span></div>
-        <div class="stat-cell"><span class="sl">Total RAM</span><span class="sv">{TOTAL_GB} GB</span></div>
-        <div class="stat-cell"><span class="sl">CPU Cores</span><span class="sv">{CPU_CORES}</span></div>
-    </div>
-    ''', unsafe_allow_html=True)
-
     st.markdown('<div class="sec">Recent Jobs</div>', unsafe_allow_html=True)
     runs = db_get_all_runs()
     if runs:
@@ -1586,15 +1550,11 @@ with tab_settings:
     </div>''',unsafe_allow_html=True)
     st.caption("Use the button in the top-right corner to switch between dark and light themes.")
 
-    st.markdown('<div class="sec">System Information</div>',unsafe_allow_html=True)
+    st.markdown('<div class="sec">System Status</div>',unsafe_allow_html=True)
     st.markdown(f'''
     <div class="stat-grid">
-        <div class="stat-cell"><span class="sl">Platform</span><span class="sv">{os.name.upper()}</span></div>
         <div class="stat-cell"><span class="sl">Browser Engine</span><span class="sv" style="color:{_green2 if SELENIUM_OK else _red2}!important">{"Ready" if SELENIUM_OK else "Not Found"}</span></div>
-        <div class="stat-cell"><span class="sl">System Monitor</span><span class="sv" style="color:{_green2 if PSUTIL_OK else _red2}!important">{"Active" if PSUTIL_OK else "Not Found"}</span></div>
-        <div class="stat-cell"><span class="sl">RAM Available</span><span class="sv">{AVAILABLE_GB} GB</span></div>
-        <div class="stat-cell"><span class="sl">CPU Cores</span><span class="sv">{CPU_CORES}</span></div>
-        <div class="stat-cell"><span class="sl">Safe Bot Limit</span><span class="sv cv-green">{SMART_LIMIT}</span></div>
+        <div class="stat-cell"><span class="sl">Hosting</span><span class="sv">Streamlit Cloud</span></div>
     </div>
     ''',unsafe_allow_html=True)
 
