@@ -181,9 +181,10 @@ def get_system_status():
     else:
         available_gb, total_gb, cpu_load = 4.0, 4.0, 0.0
         cpu_cores = os.cpu_count() or 2
-    safe_bots = max(1, min(int(available_gb / 0.6), 10))
+    safe_bots = max(1, min(int(available_gb / 0.6), 5))
     if cpu_load > 70:
         safe_bots = max(1, safe_bots // 2)
+    safe_bots = min(safe_bots, 5)  # Hard cap at 5 for stability
     return {"available_gb": available_gb, "total_gb": total_gb,
             "cpu_load": cpu_load, "cpu_cores": cpu_cores, "safe_bots": safe_bots}
 
@@ -863,16 +864,47 @@ def make_driver():
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  SCRAPER
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+def _smart_wait(drv, target_text="tr", timeout=8):
+    """Wait until page has content or timeout - smarter than fixed sleep."""
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            els = drv.find_elements(By.TAG_NAME, target_text)
+            if len(els) > 3:
+                return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False
+
+
 def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_companies):
     s = stock.strip()
     try:
-        try:
-            box = wt.until(EC.presence_of_element_located((By.ID, "nALL")))
-        except Exception:
-            drv.get(target_url); time.sleep(3)
-            box = wt.until(EC.presence_of_element_located((By.ID, "nALL")))
-        box.clear(); time.sleep(0.3); box.send_keys(s); time.sleep(0.2)
-        box.send_keys(Keys.RETURN); time.sleep(2)
+        # Smart: try to find search box, reload page if needed
+        for attempt in range(2):
+            try:
+                box = wt.until(EC.presence_of_element_located((By.ID, "nALL")))
+                break
+            except Exception:
+                drv.get(target_url)
+                _smart_wait(drv, "input", 6)
+                time.sleep(1)
+                try:
+                    box = wt.until(EC.presence_of_element_located((By.ID, "nALL")))
+                    break
+                except Exception:
+                    if attempt == 1:
+                        return {"Stock Number": s, "P.NO 1": "", "MFG 1": ""}, "err", 0
+
+        # Smart: clear and type with verification
+        box.clear(); time.sleep(0.2)
+        box.send_keys(s); time.sleep(0.15)
+        box.send_keys(Keys.RETURN)
+
+        # Smart: wait for results instead of fixed sleep
+        _smart_wait(drv, "tr", 6)
+
         src = drv.page_source
         if "Search Results:" in src or "results found" in src.lower():
             try:
@@ -881,8 +913,11 @@ def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_compani
                        drv.find_elements(By.XPATH, "//table//tr//td//a"))
                 for lk in (lks or []):
                     if lk.text.strip() and len(lk.text.strip()) >= 5:
-                        lk.click(); time.sleep(2); break
+                        lk.click()
+                        _smart_wait(drv, "tr", 5)
+                        break
             except Exception: pass
+
         rows = drv.find_elements(By.TAG_NAME, "tr")
         fstock, niin = "", ""
         for r in rows:
@@ -891,7 +926,9 @@ def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_compani
                 t = [c.text.strip() for c in cells]
                 if t[0] == "NIIN:" and len(t) > 1: niin = t[1]
                 if t[0] == "FSC:" and len(t) > 1 and niin: fstock = f"{t[1]}{niin}"
-        time.sleep(1)
+
+        # Smart: wait for data tables to fully load
+        _smart_wait(drv, "td", 4)
         rows = drv.find_elements(By.TAG_NAME, "tr")
         raw = []
         for r in rows:
@@ -1050,7 +1087,7 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
         except: pass
 
     def worker(wid, chunk, si):
-        drv=None; restarts=0
+        drv=None; restarts=0; consecutive_errors=0
         def boot():
             nonlocal drv
             try:
@@ -1060,25 +1097,39 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
             d=make_driver(); w=WebDriverWait(d,15)
             for att in range(3):
                 try:
-                    d.get(target_url); time.sleep(3); d.find_element(By.ID,"nALL")
+                    d.get(target_url)
+                    _smart_wait(d, "input", 8)
+                    d.find_element(By.ID,"nALL")
                     with lock: log_entries.append({"bot":wid,"stock":"","status":"ok","num":"READY"})
                     return d,w
                 except Exception as pe:
                     with lock: log_entries.append({"bot":wid,"stock":str(pe)[:40],"status":"err","num":f"LOAD#{att+1}"})
-                    if att<2: time.sleep(3)
+                    if att<2: time.sleep(3 + att*2)  # Progressive delay
             return d,w
         try: drv,wt=boot()
-        except Exception as be:
+        except Exception:
             with lock: ctr["done"]+=len(chunk); ctr["errors"]+=len(chunk); failed.extend(chunk)
             return
         try:
             for ci,stk in enumerate(chunk):
                 if stop_flag.is_set(): break
                 rn=si+ci+1
+
+                # Smart: if too many consecutive errors, slow down (likely IP block)
+                if consecutive_errors >= 3:
+                    with lock: log_entries.append({"bot":wid,"stock":"slowdown","status":"retry","num":f"Cooling {consecutive_errors}s"})
+                    time.sleep(consecutive_errors * 2)  # Adaptive cooldown
+                    if consecutive_errors >= 6:
+                        # Too many errors - restart browser (new IP/session)
+                        try: drv,wt=boot()
+                        except: break
+                        consecutive_errors = 0
+
                 with lock: log_entries.append({"bot":wid,"stock":stk,"status":"start","num":rn})
                 try:
                     res,status,bl = scrape_one(drv,wt,stk,target_url,priority_targets,blacklisted_companies)
                     if status=="ok" and res and res.get("Stock Number","").strip():
+                        consecutive_errors = 0  # Reset on success
                         ip=row_has_priority(res,priority_targets)
                         with lock:
                             results.append(res); ctr["done"]+=1; ctr["blacklisted"]+=bl
@@ -1086,18 +1137,21 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                             if ip: ctr["priority"]+=1; log_entries.append({"bot":wid,"stock":stk,"status":"priority","num":rn})
                             else: log_entries.append({"bot":wid,"stock":stk,"status":"ok","num":rn})
                     elif status=="dead":
+                        consecutive_errors += 1
                         with lock: log_entries.append({"bot":wid,"stock":stk,"status":"dead","num":rn}); failed.append(stk)
                         restarts+=1
                         if restarts>10: break
-                        time.sleep(2)
+                        time.sleep(2 + restarts)  # Longer wait each restart
                         try: drv,wt=boot()
                         except: break
                     elif status=="err":
+                        consecutive_errors += 1
                         with lock:
                             if res: results.append(res)
                             ctr["done"]+=1; ctr["errors"]+=1; failed.append(stk)
                             log_entries.append({"bot":wid,"stock":stk,"status":"err","num":rn})
                 except:
+                    consecutive_errors += 1
                     with lock: ctr["done"]+=1; ctr["errors"]+=1; failed.append(stk)
                     log_entries.append({"bot":wid,"stock":stk,"status":"err","num":rn})
         except: pass
@@ -1325,14 +1379,11 @@ with tab_scraper:
         st.markdown('<div class="sec">Step 2 - Choose Speed</div>', unsafe_allow_html=True)
         if "num_bots" not in ss: ss.num_bots = SMART_LIMIT
         if "speed_mode" not in ss: ss.speed_mode = "safe"
-        safe_bots = max(SMART_LIMIT, 1)
-        medium_bots = min(safe_bots+5, 15)
-        if medium_bots <= safe_bots: medium_bots = safe_bots+2
         spm = {
-            "slow":   {"b":1,           "l":"Careful",     "e":"\U0001f422", "d":"1 bot only"},
-            "safe":   {"b":safe_bots,   "l":"Recommended", "e":"\U0001f6e1\ufe0f",  "d":"Best balance"},
-            "medium": {"b":medium_bots, "l":"Faster",      "e":"\u26a1",     "d":"Quicker results"},
-            "fast":   {"b":15,          "l":"Maximum",     "e":"\U0001f680", "d":"Full power"},
+            "slow":   {"b":1,  "l":"Careful",     "e":"\U0001f422", "d":"1 bot - safest"},
+            "safe":   {"b":3,  "l":"Recommended", "e":"\U0001f6e1\ufe0f",  "d":"3 bots - stable"},
+            "medium": {"b":6,  "l":"Faster",      "e":"\u26a1",     "d":"6 bots - quicker"},
+            "fast":   {"b":10, "l":"Maximum",     "e":"\U0001f680", "d":"10 bots - full power"},
         }
         s1,s2,s3,s4 = st.columns(4)
         for col,mk in zip([s1,s2,s3,s4],["slow","safe","medium","fast"]):
