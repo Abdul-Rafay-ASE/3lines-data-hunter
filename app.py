@@ -234,128 +234,145 @@ if "theme" not in st.session_state:
 is_dark = st.session_state.theme == "dark"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ELITE CSS
+#  THEME COLORS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 if is_dark:
-    _bg = "#04080f"
-    _bg2 = "#080e1a"
-    _card = "#0c1525"
-    _border = "#162035"
-    _border2 = "#1e2d4a"
-    _text = "#e4e9f0"
-    _text2 = "#b8c5d6"
-    _muted = "#5a6e85"
-    _input = "#0c1525"
-    _accent = "#3b82f6"
-    _accent2 = "#60a5fa"
-    _green = "#10b981"
-    _green2 = "#34d399"
-    _red = "#ef4444"
-    _red2 = "#f87171"
-    _yellow = "#f59e0b"
-    _yellow2 = "#fbbf24"
-    _purple = "#8b5cf6"
-    _purple2 = "#a78bfa"
+    _bg="#0a0e1a"; _card="rgba(15,23,42,0.7)"; _card_solid="#0f172a"; _border="rgba(30,41,59,0.6)"; _border2="#334155"
+    _text="#f1f5f9"; _text2="#cbd5e1"; _muted="#64748b"; _input="#0f172a"
+    _accent="#3b82f6"; _accent2="#60a5fa"
+    _green="#10b981"; _green2="#34d399"; _red="#ef4444"; _red2="#f87171"
+    _yellow="#f59e0b"; _yellow2="#fbbf24"; _purple="#8b5cf6"; _purple2="#a78bfa"
+    _glass_bg="rgba(15,23,42,0.6)"; _glass_border="rgba(59,130,246,0.15)"
+    _shadow="rgba(0,0,0,0.4)"
 else:
-    _bg = "#f4f6f9"
-    _bg2 = "#eaeff5"
-    _card = "#ffffff"
-    _border = "#dce3ed"
-    _border2 = "#c5cfdd"
-    _text = "#111827"
-    _text2 = "#374151"
-    _muted = "#6b7280"
-    _input = "#ffffff"
-    _accent = "#2563eb"
-    _accent2 = "#3b82f6"
-    _green = "#059669"
-    _green2 = "#10b981"
-    _red = "#dc2626"
-    _red2 = "#ef4444"
-    _yellow = "#d97706"
-    _yellow2 = "#f59e0b"
-    _purple = "#7c3aed"
-    _purple2 = "#8b5cf6"
+    _bg="#f0f4f8"; _card="rgba(255,255,255,0.75)"; _card_solid="#ffffff"; _border="rgba(226,232,240,0.8)"; _border2="#cbd5e1"
+    _text="#0f172a"; _text2="#334155"; _muted="#64748b"; _input="#ffffff"
+    _accent="#2563eb"; _accent2="#3b82f6"
+    _green="#059669"; _green2="#10b981"; _red="#dc2626"; _red2="#ef4444"
+    _yellow="#d97706"; _yellow2="#f59e0b"; _purple="#7c3aed"; _purple2="#8b5cf6"
+    _glass_bg="rgba(255,255,255,0.6)"; _glass_border="rgba(37,99,235,0.12)"
+    _shadow="rgba(0,0,0,0.06)"
 
 st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+/* ── Keyframes ── */
+@keyframes gradientShift {{
+    0% {{ background-position: 0% 50%; }}
+    50% {{ background-position: 100% 50%; }}
+    100% {{ background-position: 0% 50%; }}
+}}
+@keyframes blink {{ 0%,100%{{opacity:1}} 50%{{opacity:.2}} }}
+@keyframes fadeInUp {{
+    from {{ opacity: 0; transform: translateY(12px); }}
+    to {{ opacity: 1; transform: translateY(0); }}
+}}
+@keyframes pulseGlow {{
+    0%,100% {{ box-shadow: 0 0 5px rgba(16,185,129,0.3); }}
+    50% {{ box-shadow: 0 0 20px rgba(16,185,129,0.5); }}
+}}
+@keyframes shimmer {{
+    0% {{ background-position: -200% 0; }}
+    100% {{ background-position: 200% 0; }}
+}}
 
 /* ── Base ── */
-.stApp {{ background: {_bg} !important; font-family: 'Inter', sans-serif; }}
+.stApp {{
+    background: {_bg} !important;
+    font-family: 'Inter', sans-serif;
+}}
 section[data-testid="stSidebar"], #MainMenu, footer, header {{ display: none !important; }}
 .stApp, .stApp p, .stApp span, .stApp label, .stApp div,
 .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4,
 .stApp summary, .stApp td, .stApp th, .stApp a,
 .stApp strong, .stApp em, .stApp code {{ color: {_text} !important; }}
 
-/* ── Header ── */
+/* ── Premium Header ── */
 .elite-header {{
-    background: linear-gradient(160deg, #001030 0%, #001845 40%, #002060 100%);
-    padding: 1.1rem 2rem;
+    background: linear-gradient(135deg, #0a1628 0%, #0f2340 25%, #132d5e 50%, #0f2340 75%, #0a1628 100%);
+    background-size: 300% 300%;
+    animation: gradientShift 8s ease infinite;
+    padding: 1.2rem 2.2rem;
     margin: -1rem -1rem 0 -1rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 2px solid rgba(59,130,246,0.25);
     position: relative;
     overflow: hidden;
+    border-bottom: 1px solid rgba(59,130,246,0.2);
+}}
+.elite-header::before {{
+    content: '';
+    position: absolute;
+    top: 0; left: -50%; width: 200%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(59,130,246,0.03), transparent);
+    animation: shimmer 6s linear infinite;
 }}
 .elite-header::after {{
     content: '';
     position: absolute;
-    bottom: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(96,165,250,0.5), transparent);
+    bottom: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent 0%, {_accent} 20%, {_accent2} 50%, {_accent} 80%, transparent 100%);
+    opacity: 0.6;
 }}
 .eh-brand {{
     display: flex; align-items: center; gap: 16px; z-index: 1;
 }}
 .eh-logo {{
-    font-size: 1.6rem; font-weight: 900; color: #fff !important;
-    letter-spacing: -0.3px;
+    font-size: 1.7rem; font-weight: 900; color: #fff !important;
+    letter-spacing: -0.5px;
+    text-shadow: 0 0 30px rgba(59,130,246,0.3);
 }}
 .eh-logo b {{ color: #60a5fa !important; font-weight: 400; }}
-.eh-sep {{ width: 1px; height: 24px; background: rgba(255,255,255,0.12); }}
-.eh-sub {{ font-size: 0.72rem; color: rgba(180,200,230,0.7) !important; font-weight: 500; }}
+.eh-sep {{ width: 1px; height: 28px; background: rgba(255,255,255,0.1); }}
+.eh-sub {{ font-size: 0.72rem; color: rgba(180,200,230,0.6) !important; font-weight: 500; letter-spacing: 0.5px; }}
 .eh-right {{ display: flex; align-items: center; gap: 14px; z-index: 1; }}
 .eh-pill {{
-    display: inline-flex; align-items: center; gap: 6px;
-    background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.25);
-    padding: 5px 14px; border-radius: 99px;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.2);
+    backdrop-filter: blur(10px);
+    padding: 6px 16px; border-radius: 99px;
     font-size: 0.68rem; font-weight: 600; color: #34d399 !important;
     font-family: 'JetBrains Mono', monospace;
+    animation: pulseGlow 3s ease-in-out infinite;
 }}
 .eh-pill .dot {{
-    width: 5px; height: 5px; border-radius: 50%; background: #34d399;
+    width: 6px; height: 6px; border-radius: 50%; background: #34d399;
     animation: blink 2s infinite;
 }}
-@keyframes blink {{ 0%,100%{{opacity:1}} 50%{{opacity:.2}} }}
-.eh-ver {{ font-size: 0.6rem; color: rgba(120,150,190,0.5) !important;
+.eh-ver {{ font-size: 0.58rem; color: rgba(120,150,190,0.4) !important;
     font-family: 'JetBrains Mono', monospace; }}
 
 /* ── Streamlit native tabs override ── */
 .stTabs [data-baseweb="tab-list"] {{
-    background: {_card} !important;
+    background: {_glass_bg} !important;
+    backdrop-filter: blur(12px);
     border-bottom: 1px solid {_border} !important;
     gap: 0 !important;
     padding: 0 0.5rem !important;
+    border-radius: 12px 12px 0 0;
 }}
 .stTabs [data-baseweb="tab"] {{
     font-family: 'Inter', sans-serif !important;
-    font-weight: 600 !important;
-    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    font-size: 0.85rem !important;
     color: {_muted} !important;
-    padding: 0.8rem 1.6rem !important;
+    padding: 0.9rem 1.8rem !important;
     border-bottom: 2px solid transparent !important;
     background: transparent !important;
+    transition: all 0.3s ease !important;
+    letter-spacing: 0.3px !important;
 }}
 .stTabs [data-baseweb="tab"]:hover {{
     color: {_text} !important;
+    background: rgba(59,130,246,0.05) !important;
 }}
 .stTabs [aria-selected="true"] {{
     color: {_accent2} !important;
-    border-bottom: 2px solid {_accent2} !important;
+    border-bottom: 2.5px solid {_accent2} !important;
     background: transparent !important;
 }}
 .stTabs [data-baseweb="tab-highlight"] {{
@@ -365,14 +382,21 @@ section[data-testid="stSidebar"], #MainMenu, footer, header {{ display: none !im
     display: none !important;
 }}
 
-/* ── Metric Cards ── */
+/* ── Metric Cards (Premium Glass) ── */
 .mc {{
-    background: {_card}; border: 1px solid {_border};
-    border-radius: 12px; padding: 1.1rem 0.8rem;
+    background: {_glass_bg};
+    backdrop-filter: blur(12px);
+    border: 1px solid {_glass_border};
+    border-radius: 16px; padding: 1.3rem 1rem;
     text-align: center; position: relative; overflow: hidden;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+    animation: fadeInUp 0.5s ease-out;
 }}
-.mc:hover {{ transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,{'0.3' if is_dark else '0.08'}); }}
+.mc:hover {{
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px {_shadow};
+    border-color: rgba(59,130,246,0.3);
+}}
 .mc::before {{
     content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
 }}
@@ -381,40 +405,82 @@ section[data-testid="stSidebar"], #MainMenu, footer, header {{ display: none !im
 .mc.r::before {{ background: linear-gradient(90deg,{_red},{_red2}); }}
 .mc.p::before {{ background: linear-gradient(90deg,{_purple},{_purple2}); }}
 .mc .mv {{
-    font-size: 1.7rem; font-weight: 800; line-height: 1.2; margin-top: 4px;
+    font-size: 1.8rem; font-weight: 800; line-height: 1.2; margin-top: 4px;
     font-family: 'JetBrains Mono', monospace;
 }}
 .mc .ml {{
-    font-size: 0.6rem; text-transform: uppercase; letter-spacing: 2px;
-    color: {_muted} !important; margin-top: 6px; font-weight: 700;
+    font-size: 0.6rem; text-transform: uppercase; letter-spacing: 2.5px;
+    color: {_muted} !important; margin-top: 8px; font-weight: 700;
 }}
 .cv-green {{ color: {_green2} !important; }}
 .cv-blue  {{ color: {_accent2} !important; }}
 .cv-red   {{ color: {_red2} !important; }}
 .cv-purple{{ color: {_purple2} !important; }}
 
-/* ── Stat Row ── */
+/* ── Stat Grid ── */
 .stat-grid {{
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
-    gap: 0.7rem; margin: 0.8rem 0;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(155px,1fr));
+    gap: 0.8rem; margin: 0.8rem 0;
 }}
 .stat-cell {{
-    background: {_card}; border: 1px solid {_border}; border-radius: 10px;
-    padding: 0.9rem 1rem; display: flex; justify-content: space-between; align-items: center;
+    background: {_glass_bg};
+    backdrop-filter: blur(10px);
+    border: 1px solid {_glass_border}; border-radius: 12px;
+    padding: 1rem 1.1rem; display: flex; justify-content: space-between; align-items: center;
+    transition: all 0.25s ease;
 }}
-.stat-cell .sl {{ font-size: 0.7rem; color: {_muted} !important; font-weight: 600; }}
+.stat-cell:hover {{
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px {_shadow};
+}}
+.stat-cell .sl {{ font-size: 0.72rem; color: {_muted} !important; font-weight: 600; }}
 .stat-cell .sv {{
-    font-size: 0.85rem; font-weight: 700;
+    font-size: 0.88rem; font-weight: 700;
     font-family: 'JetBrains Mono', monospace;
 }}
 
-/* ── Section ── */
+/* ── Section Divider ── */
 .sec {{
     font-size: 0.72rem; font-weight: 800; color: {_muted} !important;
     text-transform: uppercase; letter-spacing: 2.5px;
-    margin: 1.2rem 0 0.6rem; display: flex; align-items: center; gap: 10px;
+    margin: 1.4rem 0 0.7rem; display: flex; align-items: center; gap: 10px;
 }}
-.sec::after {{ content: ''; flex: 1; height: 1px; background: {_border}; }}
+.sec::after {{ content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, {_border}, transparent); }}
+
+/* ── Step Cards ── */
+.step-card {{
+    background: {_glass_bg};
+    backdrop-filter: blur(12px);
+    border: 1px solid {_glass_border};
+    border-radius: 16px;
+    padding: 1.6rem 1.2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}}
+.step-card:hover {{
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px {_shadow};
+    border-color: {_accent};
+}}
+.step-card.active {{
+    border-color: {_green};
+    box-shadow: 0 0 20px rgba(16,185,129,0.15);
+}}
+.step-num {{
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, {_accent}, {_accent2});
+    color: #fff !important; font-weight: 800; font-size: 0.9rem;
+    margin-bottom: 0.7rem;
+}}
+.step-num.done {{
+    background: linear-gradient(135deg, {_green}, {_green2});
+}}
+.step-icon {{ font-size: 2rem; margin-bottom: 0.5rem; display: block; }}
+.step-title {{ font-size: 0.9rem; font-weight: 700; color: {_text} !important; margin-bottom: 0.3rem; }}
+.step-desc {{ font-size: 0.72rem; color: {_muted} !important; line-height: 1.5; }}
 
 /* ── Inputs ── */
 div[data-testid="stTextInput"] input,
@@ -422,8 +488,9 @@ div[data-testid="stNumberInput"] input,
 div[data-testid="stTextArea"] textarea {{
     background: {_input} !important; color: {_text} !important;
     -webkit-text-fill-color: {_text} !important;
-    border: 1px solid {_border} !important; border-radius: 8px !important;
+    border: 1px solid {_border} !important; border-radius: 10px !important;
     font-weight: 600 !important; font-size: 0.92rem !important;
+    transition: all 0.25s ease !important;
 }}
 div[data-testid="stTextInput"] input:focus,
 div[data-testid="stNumberInput"] input:focus {{
@@ -431,7 +498,7 @@ div[data-testid="stNumberInput"] input:focus {{
     box-shadow: 0 0 0 3px rgba(59,130,246,0.12) !important;
 }}
 div[data-testid="stNumberInput"] button {{
-    color: {_text} !important; background: {_border} !important;
+    color: {_text} !important; background: {_card_solid} !important;
     border: 1px solid {_border} !important;
 }}
 .stApp label, div[data-testid="stWidgetLabel"] label,
@@ -445,7 +512,7 @@ div[data-testid="stWidgetLabel"] p {{
 
 /* ── Selectbox / Popover ── */
 div[data-testid="stSelectbox"] > div > div {{
-    background: {_input} !important; border: 1px solid {_border} !important; border-radius: 8px !important;
+    background: {_input} !important; border: 1px solid {_border} !important; border-radius: 10px !important;
 }}
 div[data-testid="stSelectbox"] span {{ color: {_text} !important; }}
 [data-baseweb="popover"] {{ background: {_input} !important; border: 1px solid {_border} !important; }}
@@ -454,86 +521,142 @@ div[data-testid="stSelectbox"] span {{ color: {_text} !important; }}
     background: {_input} !important; color: {_text} !important;
 }}
 [data-baseweb="popover"] li:hover, [data-baseweb="menu"] li:hover, ul[role="listbox"] li:hover {{
-    background: {_border} !important;
+    background: {_card_solid} !important;
 }}
 ul[role="listbox"] {{ background: {_input} !important; }}
 
-/* ── File Uploader ── */
+/* ── File Uploader (Premium Drop Zone) ── */
 div[data-testid="stFileUploader"] > div {{
-    background: {_input} !important; border: 2px dashed {_border2} !important; border-radius: 10px !important;
+    background: {_glass_bg} !important;
+    border: 2px dashed {_accent} !important;
+    border-radius: 16px !important;
+    transition: all 0.3s ease !important;
+    padding: 1rem !important;
 }}
-div[data-testid="stFileUploader"] > div:hover {{ border-color: {_accent2} !important; }}
+div[data-testid="stFileUploader"] > div:hover {{
+    border-color: {_green} !important;
+    background: {'rgba(16,185,129,0.05)' if is_dark else 'rgba(16,185,129,0.03)'} !important;
+    box-shadow: 0 0 30px rgba(16,185,129,0.1) !important;
+}}
 div[data-testid="stFileUploader"] span, div[data-testid="stFileUploader"] small,
 div[data-testid="stFileUploader"] p, div[data-testid="stFileUploader"] div {{ color: {_text2} !important; }}
 div[data-testid="stFileUploader"] button {{
-    color: {_text} !important; background: {_border} !important; border: 1px solid {_border} !important;
+    color: {_text} !important; background: {_card_solid} !important; border: 1px solid {_border} !important;
 }}
 
 /* ── Expander ── */
 div[data-testid="stExpander"] {{
-    background: {_card} !important; border: 1px solid {_border} !important; border-radius: 10px !important;
+    background: {_card_solid} !important; border: 1px solid {_border} !important; border-radius: 12px !important;
 }}
 div[data-testid="stExpander"] details summary {{ color: {_text2} !important; font-weight: 700 !important; }}
 
 /* ── Alert ── */
 .stAlert, div[data-testid="stAlert"] {{
-    background: {_card} !important; border-color: {_border} !important; border-radius: 8px !important;
+    background: {_card_solid} !important; border-color: {_border} !important; border-radius: 10px !important;
 }}
 .stAlert p, div[data-testid="stAlert"] p {{ color: {_text2} !important; }}
 
 /* ── Progress ── */
 .stProgress > div > div > div > div {{
-    background: linear-gradient(90deg, {_accent}, {_green2}) !important; border-radius: 6px;
+    background: linear-gradient(90deg, {_accent}, {_green2}) !important; border-radius: 8px;
+    box-shadow: 0 0 12px rgba(59,130,246,0.3);
 }}
-.stProgress > div > div > div {{ background: {_card} !important; border-radius: 6px; }}
+.stProgress > div > div > div {{ background: {_card_solid} !important; border-radius: 8px; }}
 
 /* ── Dataframe ── */
-.stDataFrame, div[data-testid="stDataFrame"] {{ background: {_card} !important; border-radius: 10px; }}
+.stDataFrame, div[data-testid="stDataFrame"] {{ background: {_card_solid} !important; border-radius: 12px; }}
 
 /* ── Buttons ── */
 .stApp button {{
-    color: {_text} !important; background: {_card} !important;
-    border: 1px solid {_border} !important; border-radius: 8px !important;
-    font-weight: 600 !important; transition: all 0.15s !important;
+    color: {_text} !important; background: {_card_solid} !important;
+    border: 1px solid {_border} !important; border-radius: 10px !important;
+    font-weight: 600 !important; transition: all 0.25s cubic-bezier(0.4,0,0.2,1) !important;
     white-space: pre-line !important; line-height: 1.4 !important;
-    padding: 0.45rem 0.8rem !important;
+    padding: 0.5rem 1rem !important;
 }}
-.stApp button:hover {{ background: {_border} !important; }}
+.stApp button:hover {{
+    background: {_card_solid} !important;
+    border-color: {_accent} !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px {_shadow} !important;
+}}
 .stApp button p {{ color: inherit !important; white-space: pre-line !important; }}
 
+/* ── Primary (START) Button - Big & Prominent ── */
 .stApp button[kind="primary"] {{
     background: linear-gradient(135deg, {_green}, #047857) !important;
-    color: #fff !important; font-weight: 800 !important; font-size: 14px !important;
-    border: none !important; height: 3em !important;
+    color: #fff !important; font-weight: 900 !important; font-size: 16px !important;
+    border: none !important; height: 3.5em !important;
+    border-radius: 14px !important;
+    box-shadow: 0 6px 20px rgba(16,185,129,0.35) !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
 }}
-.stApp button[kind="primary"]:hover {{ background: linear-gradient(135deg,#047857,#065f46) !important; }}
+.stApp button[kind="primary"]:hover {{
+    background: linear-gradient(135deg,#047857,#065f46) !important;
+    box-shadow: 0 8px 30px rgba(16,185,129,0.45) !important;
+    transform: translateY(-2px) !important;
+}}
 .stApp button[kind="primary"] p {{ color: #fff !important; }}
 
+/* ── Download Button ── */
 div[data-testid="stDownloadButton"] button {{
     background: linear-gradient(135deg,{_accent},#1d4ed8) !important;
     color: #fff !important; font-weight: 700 !important; border: none !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 14px rgba(59,130,246,0.25) !important;
 }}
-div[data-testid="stDownloadButton"] button:hover {{ background: linear-gradient(135deg,#1d4ed8,#1e40af) !important; }}
+div[data-testid="stDownloadButton"] button:hover {{
+    background: linear-gradient(135deg,#1d4ed8,#1e40af) !important;
+    box-shadow: 0 6px 20px rgba(59,130,246,0.35) !important;
+}}
 div[data-testid="stDownloadButton"] button p {{ color: #fff !important; }}
+
+/* ── STOP Button ── */
+.stop-btn-wrap button {{
+    background: linear-gradient(135deg, {_red}, #b91c1c) !important;
+    color: #fff !important; font-weight: 900 !important; font-size: 15px !important;
+    border: none !important; height: 3.5em !important;
+    border-radius: 14px !important;
+    box-shadow: 0 6px 20px rgba(239,68,68,0.3) !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
+}}
+.stop-btn-wrap button:hover {{
+    background: linear-gradient(135deg,#b91c1c,#991b1b) !important;
+    box-shadow: 0 8px 30px rgba(239,68,68,0.4) !important;
+    transform: translateY(-2px) !important;
+}}
+.stop-btn-wrap button p {{ color: #fff !important; }}
 
 /* ── Status Box ── */
 .sbox {{
-    padding: 12px 18px; border-radius: 8px; background: {_card};
-    border: 1px solid {_border}; text-align: center;
-    font-size: 0.88rem; font-weight: 700; color: {_accent2} !important;
+    padding: 14px 20px; border-radius: 12px;
+    background: {_glass_bg};
+    backdrop-filter: blur(10px);
+    border: 1px solid {_glass_border};
+    text-align: center;
+    font-size: 0.92rem; font-weight: 700; color: {_accent2} !important;
 }}
 
-/* ── Live Log ── */
+/* ── Live Log (Terminal Style) ── */
 .llog {{
-    background: {'#040810' if is_dark else '#f8fafc'};
-    border: 1px solid {_border}; border-radius: 10px;
-    padding: 0.8rem 1rem; margin-top: 0.5rem;
-    max-height: 200px; overflow-y: auto;
-    font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; line-height: 1.7;
+    background: {'#040810' if is_dark else '#1a1a2e'};
+    border: 1px solid {'rgba(59,130,246,0.15)' if is_dark else 'rgba(0,0,0,0.1)'};
+    border-radius: 14px;
+    padding: 1rem 1.2rem; margin-top: 0.5rem;
+    max-height: 220px; overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; line-height: 1.8;
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.3);
 }}
-.llog .lt {{ color: {_muted} !important; font-size: 0.58rem; text-transform: uppercase;
-    letter-spacing: 2px; margin-bottom: 0.4rem; font-weight: 700; }}
-.llog .ll {{ color: {_text2} !important; }}
+.llog .lt {{
+    color: {'#4a5568' if is_dark else '#a0aec0'} !important;
+    font-size: 0.58rem; text-transform: uppercase;
+    letter-spacing: 3px; margin-bottom: 0.5rem; font-weight: 700;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid {'rgba(255,255,255,0.05)' if is_dark else 'rgba(255,255,255,0.1)'};
+}}
+.llog .ll {{ color: {'#a0aec0' if is_dark else '#cbd5e1'} !important; }}
 .llog .ll .bi {{ color: {_accent2} !important; font-weight: 700; }}
 .llog .ll .sn {{ color: {_green2} !important; }}
 .llog .ll .lok {{ color: {_green2} !important; }}
@@ -543,50 +666,56 @@ div[data-testid="stDownloadButton"] button p {{ color: #fff !important; }}
 
 /* ── Banners ── */
 .dbanner {{
-    background: {'linear-gradient(135deg,#071a12,#0a2618)' if is_dark else 'linear-gradient(135deg,#ecfdf5,#d1fae5)'};
-    border: 1px solid {'#166534' if is_dark else '#6ee7b7'};
-    border-radius: 12px; padding: 1.6rem; margin: 0.8rem 0; text-align: center;
+    background: {'linear-gradient(135deg,rgba(7,26,18,0.9),rgba(10,38,24,0.9))' if is_dark else 'linear-gradient(135deg,#ecfdf5,#d1fae5)'};
+    border: 1px solid {'rgba(22,101,52,0.5)' if is_dark else '#6ee7b7'};
+    border-radius: 16px; padding: 2rem; margin: 1rem 0; text-align: center;
+    backdrop-filter: blur(10px);
 }}
-.dbanner .dt {{ color: {_green2} !important; font-size: 1.2rem; font-weight: 800; }}
-.dbanner .dm {{ color: {_muted} !important; font-size: 0.78rem; margin-top: 0.4rem;
+.dbanner .dt {{ color: {_green2} !important; font-size: 1.3rem; font-weight: 800; }}
+.dbanner .dm {{ color: {_muted} !important; font-size: 0.8rem; margin-top: 0.5rem;
     font-family: 'JetBrains Mono', monospace; }}
 
 .sbanner {{
-    background: {'linear-gradient(135deg,#1a1500,#1f1a00)' if is_dark else 'linear-gradient(135deg,#fffbeb,#fef3c7)'};
-    border: 1px solid {'#854d0e' if is_dark else '#fcd34d'};
-    border-radius: 12px; padding: 1.6rem; margin: 0.8rem 0; text-align: center;
+    background: {'linear-gradient(135deg,rgba(26,21,0,0.9),rgba(31,26,0,0.9))' if is_dark else 'linear-gradient(135deg,#fffbeb,#fef3c7)'};
+    border: 1px solid {'rgba(133,77,14,0.5)' if is_dark else '#fcd34d'};
+    border-radius: 16px; padding: 2rem; margin: 1rem 0; text-align: center;
+    backdrop-filter: blur(10px);
 }}
-.sbanner .st2 {{ color: {_yellow2} !important; font-size: 1.2rem; font-weight: 800; }}
-.sbanner .sm {{ color: {_muted} !important; font-size: 0.78rem; margin-top: 0.4rem;
+.sbanner .st2 {{ color: {_yellow2} !important; font-size: 1.3rem; font-weight: 800; }}
+.sbanner .sm {{ color: {_muted} !important; font-size: 0.8rem; margin-top: 0.5rem;
     font-family: 'JetBrains Mono', monospace; }}
 
 /* ── Misc ── */
 .apbox {{
-    background: {'#071a12' if is_dark else '#ecfdf5'}; border: 1px solid {'#166534' if is_dark else '#6ee7b7'};
-    border-radius: 8px; padding: 10px 14px; font-size: 0.8rem; font-weight: 600; color: {_green2} !important;
+    background: {'rgba(7,26,18,0.7)' if is_dark else '#ecfdf5'};
+    border: 1px solid {'rgba(22,101,52,0.4)' if is_dark else '#6ee7b7'};
+    border-radius: 12px; padding: 12px 16px; font-size: 0.8rem; font-weight: 600; color: {_green2} !important;
+    backdrop-filter: blur(8px);
 }}
-.apbox .apt {{ font-weight: 800; font-size: 0.83rem; color: {_green2} !important; }}
+.apbox .apt {{ font-weight: 800; font-size: 0.85rem; color: {_green2} !important; }}
 .apbox .apd {{ color: {_muted} !important; font-weight: 500; font-size: 0.72rem;
     font-family: 'JetBrains Mono', monospace; }}
 
 .ramalert {{
-    background: {'#1a0808' if is_dark else '#fef2f2'}; border-left: 3px solid {_red};
-    border-radius: 0 8px 8px 0; padding: 10px 14px; margin: 0.4rem 0;
-    font-size: 0.8rem; font-weight: 700; color: {_red2} !important;
+    background: {'rgba(26,8,8,0.8)' if is_dark else '#fef2f2'}; border-left: 3px solid {_red};
+    border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 0.4rem 0;
+    font-size: 0.82rem; font-weight: 700; color: {_red2} !important;
 }}
 .blwarn {{
     color: {_yellow2} !important; font-size: 0.76rem; font-weight: 600;
-    padding: 0.35rem 0.6rem; background: {'#1a1500' if is_dark else '#fffbeb'};
-    border-left: 3px solid {_yellow}; border-radius: 0 4px 4px 0; margin-top: 0.3rem;
+    padding: 0.4rem 0.7rem; background: {'rgba(26,21,0,0.7)' if is_dark else '#fffbeb'};
+    border-left: 3px solid {_yellow}; border-radius: 0 6px 6px 0; margin-top: 0.3rem;
 }}
 .hr2 {{ height: 1px; background: linear-gradient(90deg,transparent,{_border},transparent);
-    margin: 1rem 0; border: none; }}
+    margin: 1.2rem 0; border: none; }}
 .hrow {{
-    background: {_card}; border: 1px solid {_border}; border-radius: 8px;
-    padding: 0.6rem 1rem; margin: 0.3rem 0; font-size: 0.78rem;
+    background: {_glass_bg}; backdrop-filter: blur(8px);
+    border: 1px solid {_glass_border}; border-radius: 12px;
+    padding: 0.7rem 1.2rem; margin: 0.4rem 0; font-size: 0.8rem;
     display: flex; justify-content: space-between; align-items: center;
+    transition: all 0.2s ease;
 }}
-.hrow:hover {{ border-color: {_border2}; }}
+.hrow:hover {{ border-color: {_accent}; transform: translateX(3px); }}
 .hrow span {{ color: {_text} !important; }}
 .hrow .hd {{ color: {_muted} !important; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; }}
 .hrow .hr2c {{ color: {_green2} !important; font-weight: 700; }}
@@ -594,23 +723,44 @@ div[data-testid="stDownloadButton"] button p {{ color: #fff !important; }}
 .hrow .ht {{ color: {_purple2} !important; font-family: 'JetBrains Mono', monospace; }}
 
 .upload-placeholder {{
-    background: {_card}; border: 2px dashed {_border2}; border-radius: 14px;
-    padding: 3rem 2rem; text-align: center;
+    background: {_glass_bg}; backdrop-filter: blur(12px);
+    border: 2px dashed {_accent}; border-radius: 20px;
+    padding: 3.5rem 2rem; text-align: center;
+    transition: all 0.3s ease;
+    animation: fadeInUp 0.6s ease-out;
 }}
-.upload-placeholder .up-icon {{ font-size: 2.5rem; margin-bottom: 0.8rem; }}
-.upload-placeholder .up-title {{ font-size: 1rem; font-weight: 700; color: {_text} !important; }}
-.upload-placeholder .up-sub {{ font-size: 0.78rem; color: {_muted} !important; margin-top: 0.3rem; }}
+.upload-placeholder:hover {{ border-color: {_green}; }}
+.upload-placeholder .up-icon {{ font-size: 3rem; margin-bottom: 1rem; }}
+.upload-placeholder .up-title {{ font-size: 1.1rem; font-weight: 800; color: {_text} !important; }}
+.upload-placeholder .up-sub {{ font-size: 0.8rem; color: {_muted} !important; margin-top: 0.4rem; }}
 
+/* ── Speed Button Selected ── */
+.speed-selected {{
+    border: 2px solid {_green} !important;
+    box-shadow: 0 0 15px rgba(16,185,129,0.2) !important;
+}}
+
+/* ── Health Bar ── */
+.health-bar-track {{
+    width: 100%; height: 8px; border-radius: 4px;
+    background: {_card_solid}; overflow: hidden; margin-top: 6px;
+}}
+.health-bar-fill {{
+    height: 100%; border-radius: 4px; transition: width 0.5s ease;
+}}
+
+/* ── Footer ── */
 .footer {{
-    text-align: center; padding: 1.2rem 0; margin-top: 1.5rem;
-    border-top: 1px solid {_border}; font-size: 0.68rem;
-    color: {_muted} !important; letter-spacing: 0.3px;
+    text-align: center; padding: 1.5rem 0; margin-top: 2rem;
+    border-top: 1px solid {_border}; font-size: 0.65rem;
+    color: {_muted} !important; letter-spacing: 0.5px;
 }}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {{ width: 5px; }}
-::-webkit-scrollbar-track {{ background: {_bg}; }}
+::-webkit-scrollbar-track {{ background: transparent; }}
 ::-webkit-scrollbar-thumb {{ background: {_border2}; border-radius: 3px; }}
+::-webkit-scrollbar-thumb:hover {{ background: {_accent}; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1061,7 +1211,7 @@ st.markdown(f'''
     <div class="eh-brand">
         <div class="eh-logo">3LINES <b>DataHunter</b></div>
         <div class="eh-sep"></div>
-        <div class="eh-sub">Real-Time Resource Auditing &mdash; Dual Filtering &mdash; Full Autopilot</div>
+        <div class="eh-sub">Automated Data Collection &mdash; Smart Filtering &mdash; One-Click Export</div>
     </div>
     <div class="eh-right">
         <div class="eh-pill"><div class="dot"></div>RAM {AVAILABLE_GB}GB &bull; CPU {CPU_LOAD}% &bull; {SMART_LIMIT} Bots</div>
@@ -1070,15 +1220,15 @@ st.markdown(f'''
 </div>
 ''', unsafe_allow_html=True)
 
-# ── Theme Toggle (small, top-right) ──
-_, tc = st.columns([9, 1])
+# ── Theme Toggle (small, clean, top-right) ──
+_, tc = st.columns([11, 1])
 with tc:
-    tl = "\u2600\ufe0f Light" if is_dark else "\U0001f319 Dark"
+    tl = "Light" if is_dark else "Dark"
     if st.button(tl, key="thm"):
         ss.theme = "light" if is_dark else "dark"
         st.rerun()
 
-# ── Tabs (native Streamlit) ──
+# ── Tabs (native Streamlit ONLY) ──
 tab_scraper, tab_dashboard, tab_database, tab_settings = st.tabs([
     "Scraper", "Dashboard", "Database", "Settings"
 ])
@@ -1086,18 +1236,55 @@ tab_scraper, tab_dashboard, tab_database, tab_settings = st.tabs([
 
 # ━━━━━━━━━ TAB: SCRAPER ━━━━━━━━━
 with tab_scraper:
-    cu, cf, cn = st.columns([2, 1, 1])
-    with cu: target_url = st.text_input("Target Website URL", value=DEFAULT_URL)
-    with cf: uploaded_file = st.file_uploader("Upload Excel", type=["xlsx","xls"])
-    with cn: custom_name = st.text_input("Save File As:", value="3LINES_Results"); ss.custom_name = custom_name
 
-    with st.expander("Advanced Settings", expanded=False):
+    # Step indicators at the top
+    has_file = ss.get("file_bytes") is not None or ss.completed
+    step1_done = has_file
+    step2_done = has_file  # config is always available once file uploaded
+    step3_active = ss.running
+
+    st.markdown(f'''
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="step-card {'active' if not step1_done else ''}" style="animation-delay: 0.1s;">
+            <span class="step-num {'done' if step1_done else ''}">1</span>
+            <span class="step-icon">&#128194;</span>
+            <div class="step-title">Upload Your File</div>
+            <div class="step-desc">Drop your Excel file with stock numbers in Column A</div>
+        </div>
+        <div class="step-card {'active' if step1_done and not step3_active else ''}" style="animation-delay: 0.2s;">
+            <span class="step-num {'done' if step2_done else ''}">2</span>
+            <span class="step-icon">&#9881;&#65039;</span>
+            <div class="step-title">Choose Speed</div>
+            <div class="step-desc">Pick how fast you want the search to run</div>
+        </div>
+        <div class="step-card {'active' if step3_active else ''}" style="animation-delay: 0.3s;">
+            <span class="step-num {'done' if ss.completed else ''}">3</span>
+            <span class="step-icon">&#9654;&#65039;</span>
+            <div class="step-title">Start Search</div>
+            <div class="step-desc">Hit the big green button and watch results come in</div>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+    # ── Step 1: Upload & Config ──
+    st.markdown('<div class="sec">Step 1 - Upload &amp; Configure</div>', unsafe_allow_html=True)
+
+    cu, cf = st.columns([2, 1])
+    with cu:
+        target_url = st.text_input("Target Website URL", value=DEFAULT_URL)
+    with cf:
+        custom_name = st.text_input("Save File As:", value="3LINES_Results")
+        ss.custom_name = custom_name
+
+    uploaded_file = st.file_uploader("Upload your Excel file (.xlsx or .xls)", type=["xlsx","xls"])
+
+    with st.expander("Advanced Settings (Priority & Blacklist)", expanded=False):
         f1, f2 = st.columns(2)
         with f1:
             priority_input = st.text_input("Priority Companies", value="", placeholder="e.g. AMETEK, SAMI, BOEING")
         with f2:
             blacklist_input = st.text_input("Blacklisted Companies", value="", placeholder="e.g. HARSCO, ACME")
-            st.markdown('<p class="blwarn">\u26a0\ufe0f Blacklist adds extra processing time.</p>', unsafe_allow_html=True)
+            st.markdown('<p class="blwarn">Blacklist adds extra processing time.</p>', unsafe_allow_html=True)
         priority_targets = parse_comma_list(priority_input)
         blacklisted_companies = parse_comma_list(blacklist_input)
 
@@ -1112,48 +1299,52 @@ with tab_scraper:
         total_records = len(detected_stocks); ss.stock_count = total_records
         if validation_error and not ss.running and not ss.completed: st.error(validation_error)
         elif total_records == 0 and not ss.running and not ss.completed:
-            st.error("\u274c File Rejected: Stock numbers must start from Row 2 in Column A")
+            st.error("File Rejected: Stock numbers must start from Row 2 in Column A")
 
-        # Speed
-        st.markdown('<div class="sec">Speed Mode</div>', unsafe_allow_html=True)
+        # ── Step 2: Speed ──
+        st.markdown('<div class="sec">Step 2 - Choose Speed</div>', unsafe_allow_html=True)
         if "num_bots" not in ss: ss.num_bots = SMART_LIMIT
         if "speed_mode" not in ss: ss.speed_mode = "safe"
         safe_bots = max(SMART_LIMIT, 1)
         medium_bots = min(safe_bots+5, 15)
         if medium_bots <= safe_bots: medium_bots = safe_bots+2
-        spm = {"slow":{"b":1,"l":"Slow","i":"\U0001f422"}, "safe":{"b":safe_bots,"l":"Safe","i":"\U0001f6e1\ufe0f"},
-               "medium":{"b":medium_bots,"l":"Medium","i":"\u26a1"}, "fast":{"b":20,"l":"Fast","i":"\U0001f680"}}
+        spm = {"slow":{"b":1,"l":"Slow","i":"Careful","d":"1 bot - safest"}, "safe":{"b":safe_bots,"l":"Safe","i":"Recommended","d":f"{safe_bots} bots - balanced"},
+               "medium":{"b":medium_bots,"l":"Medium","i":"Faster","d":f"{medium_bots} bots - quicker"}, "fast":{"b":20,"l":"Fast","i":"Maximum","d":"20 bots - fastest"}}
         s1,s2,s3,s4 = st.columns(4)
         for col,mk in zip([s1,s2,s3,s4],["slow","safe","medium","fast"]):
             m = spm[mk]; sel = mk==ss.speed_mode; rec = " (Best)" if mk=="safe" else ""
-            chk = "\u2705 " if sel else ""
+            chk = ">> " if sel else ""
             with col:
-                if st.button(f"{chk}{m['i']} {m['l']}{rec}\n{m['b']} bot{'s' if m['b']>1 else ''}",
+                if st.button(f"{chk}{m['i']}{rec}\n{m['l']} - {m['b']} bot{'s' if m['b']>1 else ''}",
                              key=f"sp_{mk}", use_container_width=True,
                              type="primary" if sel else "secondary"):
                     ss.speed_mode=mk; ss.num_bots=m["b"]; st.rerun()
         num_bots = ss.num_bots; sm = spm[ss.speed_mode]
-        st.markdown(f'<div class="apbox"><span class="apt">\u2705 {sm["i"]} {sm["l"]} ({sm["b"]} bot{"s" if sm["b"]>1 else ""})</span><br>'
-                    f'<span class="apd">RAM: {AVAILABLE_GB}GB | CPU: {CPU_LOAD}% | Safe: {SMART_LIMIT}</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="apbox"><span class="apt">Selected: {sm["l"]} ({sm["b"]} bot{"s" if sm["b"]>1 else ""})</span><br>'
+                    f'<span class="apd">RAM: {AVAILABLE_GB}GB | CPU: {CPU_LOAD}% | Safe limit: {SMART_LIMIT}</span></div>', unsafe_allow_html=True)
         if num_bots > SMART_LIMIT:
-            st.markdown(f'<div class="ramalert">\U0001f6a8 Warning! Safe limit is {SMART_LIMIT} bots. Running {num_bots} may freeze your system.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="ramalert">Warning: Safe limit is {SMART_LIMIT} bots. Running {num_bots} may slow your computer.</div>', unsafe_allow_html=True)
 
-        # Controls
-        st.markdown('<div class="sec">Controls</div>', unsafe_allow_html=True)
+        # ── Step 3: Controls ──
+        st.markdown('<div class="sec">Step 3 - Start Search</div>', unsafe_allow_html=True)
         c2,c3,c4 = st.columns([2,1,1])
         with c2:
             mx2 = max(total_records,1)
-            process_limit = st.number_input("Process Limit", min_value=0, max_value=mx2, value=0, step=100, help="0 = all")
-            st.caption(f"All {total_records:,}" if process_limit==0 else f"First {process_limit:,} of {total_records:,}")
+            process_limit = st.number_input("How many to process (0 = all)", min_value=0, max_value=mx2, value=0, step=100, help="0 means process everything")
+            st.caption(f"Will process all {total_records:,} records" if process_limit==0 else f"Will process first {process_limit:,} of {total_records:,}")
         with c3:
             can = total_records>0 and SELENIUM_OK and not ss.running and not ss.completed and not validation_error
-            start_btn = st.button("START", use_container_width=True, disabled=not can, type="primary")
-            if not SELENIUM_OK: st.caption("Selenium missing")
+            start_btn = st.button("START SEARCH", use_container_width=True, disabled=not can, type="primary")
+            if not SELENIUM_OK: st.caption("Selenium not installed")
         with c4:
+            st.markdown('<div class="stop-btn-wrap">', unsafe_allow_html=True)
             if st.button("STOP", use_container_width=True, key="stop_m"): ss.stop_flag.set()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="hr2"></div>', unsafe_allow_html=True)
-        st.markdown('<div class="sec">Live Tracker</div>', unsafe_allow_html=True)
+
+        # ── Live Tracker ──
+        st.markdown('<div class="sec">Live Progress</div>', unsafe_allow_html=True)
         c1,c2,c3,c4,c5 = st.columns(5)
         m1_ph,m2_ph,m3_ph,m4_ph,m5_ph = c1.empty(),c2.empty(),c3.empty(),c4.empty(),c5.empty()
         cd2 = ss.processed; ct2 = ss.target if ss.target>0 else total_records
@@ -1167,7 +1358,7 @@ with tab_scraper:
         progress_bar = st.progress(init_pct)
         status_ph = st.empty(); log_ph = st.empty(); stop_ph = st.empty()
         if not ss.running and not ss.completed:
-            status_ph.markdown(f'<div class="sbox">{total_records:,} search keys \u2014 Ready</div>',unsafe_allow_html=True)
+            status_ph.markdown(f'<div class="sbox">{total_records:,} records ready to process</div>',unsafe_allow_html=True)
             log_ph.markdown(render_log([]),unsafe_allow_html=True)
         if start_btn and not ss.running and not ss.completed:
             try:
@@ -1179,12 +1370,13 @@ with tab_scraper:
                 import traceback; st.code(traceback.format_exc())
 
     elif not ss.completed:
-        st.markdown(f'<div class="upload-placeholder"><div class="up-icon">&#128194;</div>'
-                    f'<div class="up-title">Upload an Excel File to Begin</div>'
-                    f'<div class="up-sub">Drag & drop or click upload above (.xlsx / .xls)</div></div>',
-                    unsafe_allow_html=True)
+        st.markdown(f'''<div class="upload-placeholder">
+            <div class="up-icon">&#128194;</div>
+            <div class="up-title">Upload an Excel File to Begin</div>
+            <div class="up-sub">Drag and drop or click the upload button above<br>Accepts .xlsx and .xls files &mdash; stock numbers should be in Column A starting from Row 2</div>
+        </div>''', unsafe_allow_html=True)
 
-    # Completion
+    # ── Completion ──
     if ss.completed:
         elapsed=ss.elapsed; total=ss.target; ts5=ss.processed*MINUTES_PER_ITEM_MANUAL
         em4,es4=divmod(int(elapsed),60); eh4,em4=divmod(em4,60)
@@ -1214,92 +1406,116 @@ with tab_scraper:
                     f'<div class="sm">{ss.processed:,} rows &bull; {rem2:,} remaining &bull; {ss.priority_matches:,} priority &bull; {ed2}</div></div>',unsafe_allow_html=True)
             else:
                 st.balloons()
-                st.markdown(f'<div class="dbanner"><div class="dt">Scraping Complete</div>'
+                st.markdown(f'<div class="dbanner"><div class="dt">Search Complete!</div>'
                     f'<div class="dm">{ss.processed:,} rows &bull; {ss.priority_matches:,} priority &bull; {ss.blacklisted:,} blacklisted &bull; {ss.errors:,} errors</div></div>',unsafe_allow_html=True)
             if not ss.auto_downloaded:
                 b64=base64.b64encode(ss.output_bytes).decode()
                 components.html(f'<script>var a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}";a.download="{ss.output_name}";document.body.appendChild(a);a.click();</script>',height=0)
                 ss.auto_downloaded=True
             if ss.final_data:
-                with st.expander("Data Preview (10 rows)",expanded=False):
+                with st.expander("Preview Results (first 10 rows)",expanded=False):
                     pf=pd.DataFrame(ss.final_data[:10])
                     cs2=["Stock Number"]+[c for c in pf.columns if c!="Stock Number"]
                     st.dataframe(pf[cs2],use_container_width=True)
-            st.markdown('<div class="sec">Download</div>',unsafe_allow_html=True)
+            st.markdown('<div class="sec">Download Your Files</div>',unsafe_allow_html=True)
             d1,d2,d3=st.columns(3)
-            with d1: st.download_button(f"Excel: {ss.output_name}",data=ss.output_bytes,file_name=ss.output_name,
+            with d1: st.download_button(f"Download Excel",data=ss.output_bytes,file_name=ss.output_name,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True)
             with d2:
                 cv=build_csv(ss.final_data,priority_targets,blacklisted_companies)
-                if cv: st.download_button(f"CSV",data=cv,file_name=ss.output_name.replace(".xlsx",".csv"),mime="text/csv",use_container_width=True)
+                if cv: st.download_button(f"Download CSV",data=cv,file_name=ss.output_name.replace(".xlsx",".csv"),mime="text/csv",use_container_width=True)
             with d3:
                 jv=build_json(ss.final_data,priority_targets,blacklisted_companies)
-                if jv: st.download_button(f"JSON",data=jv,file_name=ss.output_name.replace(".xlsx",".json"),mime="application/json",use_container_width=True)
+                if jv: st.download_button(f"Download JSON",data=jv,file_name=ss.output_name.replace(".xlsx",".json"),mime="application/json",use_container_width=True)
         else:
-            st.error(f"0 results scraped. Errors: {ss.errors:,} | Elapsed: {int(elapsed)}s")
-        if st.button("Run Again",use_container_width=True):
+            st.error(f"No results found. Errors: {ss.errors:,} | Time: {int(elapsed)}s")
+        if st.button("Run Again",use_container_width=True, type="primary"):
             for k,v in defaults.items(): ss[k]=v
             ss.stop_flag.clear(); st.rerun()
     if ss.run_history:
-        with st.expander(f"Run History ({len(ss.run_history)})",expanded=False):
+        with st.expander(f"Run History ({len(ss.run_history)} runs)",expanded=False):
             for i,h in enumerate(reversed(ss.run_history)):
-                ic="\u26a0\ufe0f" if h.get("stopped") else "\u2705"
-                st.markdown(f'<div class="hrow"><span>{ic} #{len(ss.run_history)-i}</span>'
+                ic="Stopped" if h.get("stopped") else "Done"
+                st.markdown(f'<div class="hrow"><span>#{len(ss.run_history)-i} ({ic})</span>'
                     f'<span class="hd">{h["date"]}</span><span class="hr2c">{h["records"]:,}/{h["total"]:,}</span>'
-                    f'<span class="hp">{h["priority"]:,} pri</span><span class="ht">{h["elapsed"]}</span></div>',unsafe_allow_html=True)
+                    f'<span class="hp">{h["priority"]:,} priority</span><span class="ht">{h["elapsed"]}</span></div>',unsafe_allow_html=True)
             if st.button("Clear History"): ss.run_history=[]; st.rerun()
 
 
 # ━━━━━━━━━ TAB: DASHBOARD ━━━━━━━━━
 with tab_dashboard:
     stats = db_get_total_stats()
-    st.markdown(f'''
-    <div class="stat-grid">
-        <div class="stat-cell"><span class="sl">Total Runs</span><span class="sv cv-blue">{stats["total_runs"]}</span></div>
-        <div class="stat-cell"><span class="sl">Records</span><span class="sv cv-green">{stats["total_records"]:,}</span></div>
-        <div class="stat-cell"><span class="sl">Priority</span><span class="sv cv-purple">{stats["total_priority"]:,}</span></div>
-        <div class="stat-cell"><span class="sl">Errors</span><span class="sv cv-red">{stats["total_errors"]:,}</span></div>
-    </div>
-    ''', unsafe_allow_html=True)
+
+    st.markdown('<div class="sec">Overview</div>', unsafe_allow_html=True)
+    d1,d2,d3,d4 = st.columns(4)
+    d1.markdown(rmetric("Total Runs", f"{stats['total_runs']}", "b"), unsafe_allow_html=True)
+    d2.markdown(rmetric("All Records", f"{stats['total_records']:,}", "g"), unsafe_allow_html=True)
+    d3.markdown(rmetric("Priority Found", f"{stats['total_priority']:,}", "p"), unsafe_allow_html=True)
+    d4.markdown(rmetric("Total Errors", f"{stats['total_errors']:,}", "r"), unsafe_allow_html=True)
+
     st.markdown('<div class="sec">System Health</div>', unsafe_allow_html=True)
     ram_pct = round(((TOTAL_GB-AVAILABLE_GB)/TOTAL_GB)*100) if TOTAL_GB>0 else 0
-    cpu_c = _red2 if CPU_LOAD>80 else (_yellow2 if CPU_LOAD>60 else _green2)
-    ram_c = _red2 if ram_pct>80 else (_yellow2 if ram_pct>60 else _accent2)
+    cpu_color = _red2 if CPU_LOAD>80 else (_yellow2 if CPU_LOAD>60 else _green2)
+    ram_color = _red2 if ram_pct>80 else (_yellow2 if ram_pct>60 else _green2)
+
+    h1, h2, h3 = st.columns(3)
+    with h1:
+        st.markdown(f'''<div class="stat-cell" style="flex-direction:column; align-items:stretch;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span class="sl">CPU Usage</span><span class="sv" style="color:{cpu_color}!important">{CPU_LOAD}%</span>
+            </div>
+            <div class="health-bar-track"><div class="health-bar-fill" style="width:{min(CPU_LOAD,100)}%; background:linear-gradient(90deg,{_green},{cpu_color});"></div></div>
+        </div>''', unsafe_allow_html=True)
+    with h2:
+        st.markdown(f'''<div class="stat-cell" style="flex-direction:column; align-items:stretch;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span class="sl">RAM Usage</span><span class="sv" style="color:{ram_color}!important">{ram_pct}%</span>
+            </div>
+            <div class="health-bar-track"><div class="health-bar-fill" style="width:{min(ram_pct,100)}%; background:linear-gradient(90deg,{_green},{ram_color});"></div></div>
+        </div>''', unsafe_allow_html=True)
+    with h3:
+        st.markdown(f'''<div class="stat-cell" style="flex-direction:column; align-items:stretch;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span class="sl">Bot Capacity</span><span class="sv cv-green">{SMART_LIMIT} bots</span>
+            </div>
+            <div class="health-bar-track"><div class="health-bar-fill" style="width:{min(SMART_LIMIT*5,100)}%; background:linear-gradient(90deg,{_accent},{_green});"></div></div>
+        </div>''', unsafe_allow_html=True)
+
     st.markdown(f'''
     <div class="stat-grid">
-        <div class="stat-cell"><span class="sl">CPU</span><span class="sv" style="color:{cpu_c}!important">{CPU_LOAD}%</span></div>
-        <div class="stat-cell"><span class="sl">RAM Used</span><span class="sv" style="color:{ram_c}!important">{ram_pct}%</span></div>
-        <div class="stat-cell"><span class="sl">Available</span><span class="sv">{AVAILABLE_GB} GB</span></div>
+        <div class="stat-cell"><span class="sl">Available RAM</span><span class="sv">{AVAILABLE_GB} GB</span></div>
         <div class="stat-cell"><span class="sl">Total RAM</span><span class="sv">{TOTAL_GB} GB</span></div>
-        <div class="stat-cell"><span class="sl">Cores</span><span class="sv">{CPU_CORES}</span></div>
-        <div class="stat-cell"><span class="sl">Safe Bots</span><span class="sv cv-green">{SMART_LIMIT}</span></div>
+        <div class="stat-cell"><span class="sl">CPU Cores</span><span class="sv">{CPU_CORES}</span></div>
     </div>
     ''', unsafe_allow_html=True)
+
     st.markdown('<div class="sec">Recent Jobs</div>', unsafe_allow_html=True)
     runs = db_get_all_runs()
     if runs:
         for r in runs[:10]:
-            ic="\u26a0\ufe0f" if r["was_stopped"] else "\u2705"
-            st.markdown(f'<div class="hrow"><span>{ic} {r["save_name"]}</span><span class="hd">{r["created_at"][:16]}</span>'
-                f'<span class="hr2c">{r["processed"]:,}/{r["total_stocks"]:,}</span><span class="hp">{r["priority_count"]:,} pri</span>'
+            status_label = "Stopped" if r["was_stopped"] else "Completed"
+            st.markdown(f'<div class="hrow"><span>{status_label} - {r["save_name"]}</span><span class="hd">{r["created_at"][:16]}</span>'
+                f'<span class="hr2c">{r["processed"]:,}/{r["total_stocks"]:,}</span><span class="hp">{r["priority_count"]:,} priority</span>'
                 f'<span class="ht">{r["elapsed"]}</span></div>',unsafe_allow_html=True)
-    else: st.info("No jobs yet. Go to Scraper to start.")
+    else:
+        st.info("No jobs yet. Go to the Scraper tab to start your first search.")
 
 
 # ━━━━━━━━━ TAB: DATABASE ━━━━━━━━━
 with tab_database:
     stats = db_get_total_stats()
-    st.markdown(f'''
-    <div class="stat-grid">
-        <div class="stat-cell"><span class="sl">Runs</span><span class="sv cv-blue">{stats["total_runs"]}</span></div>
-        <div class="stat-cell"><span class="sl">Records</span><span class="sv cv-green">{stats["total_records"]:,}</span></div>
-        <div class="stat-cell"><span class="sl">Priority</span><span class="sv cv-purple">{stats["total_priority"]:,}</span></div>
-        <div class="stat-cell"><span class="sl">Errors</span><span class="sv cv-red">{stats["total_errors"]:,}</span></div>
-    </div>
-    ''', unsafe_allow_html=True)
-    if stats["total_runs"]==0: st.info("No data yet. Run a scraping job first.")
+
+    st.markdown('<div class="sec">Database Overview</div>', unsafe_allow_html=True)
+    db1,db2,db3,db4 = st.columns(4)
+    db1.markdown(rmetric("Runs", f"{stats['total_runs']}", "b"), unsafe_allow_html=True)
+    db2.markdown(rmetric("Records", f"{stats['total_records']:,}", "g"), unsafe_allow_html=True)
+    db3.markdown(rmetric("Priority", f"{stats['total_priority']:,}", "p"), unsafe_allow_html=True)
+    db4.markdown(rmetric("Errors", f"{stats['total_errors']:,}", "r"), unsafe_allow_html=True)
+
+    if stats["total_runs"]==0:
+        st.info("No data saved yet. Run a search first, and results will appear here.")
     else:
-        vm = st.radio("View", ["All Combined","By Run"], horizontal=True, key="dbvm")
+        vm = st.radio("View Mode", ["All Combined","By Run"], horizontal=True, key="dbvm")
         if vm=="All Combined":
             ar = db_get_all_results()
             if ar:
@@ -1307,18 +1523,19 @@ with tab_database:
                 dc=["Stock Number"]+[c for c in df.columns if c not in ("Stock Number","_run_id","_date","_save_name")]+["_date","_save_name"]
                 dc=[c for c in dc if c in df.columns]; df=df[dc].rename(columns={"_date":"Date","_save_name":"File"})
                 st.dataframe(df,use_container_width=True,height=400)
+                st.markdown('<div class="sec">Download All Data</div>', unsafe_allow_html=True)
                 d1,d2=st.columns(2)
-                with d1: st.download_button("CSV",data=df.to_csv(index=False).encode("utf-8"),
+                with d1: st.download_button("Download as CSV",data=df.to_csv(index=False).encode("utf-8"),
                     file_name=f"ALL_{datetime.now():%Y%m%d}.csv",mime="text/csv",use_container_width=True)
                 with d2:
                     xb2=io.BytesIO(); df.to_excel(xb2,index=False,engine="openpyxl"); xb2.seek(0)
-                    st.download_button("Excel",data=xb2.getvalue(),
+                    st.download_button("Download as Excel",data=xb2.getvalue(),
                         file_name=f"ALL_{datetime.now():%Y%m%d}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True)
         else:
             for r in db_get_all_runs():
-                ic="\u26a0\ufe0f" if r["was_stopped"] else "\u2705"
-                with st.expander(f'{ic} {r["save_name"]} | {r["processed"]:,} rec | {r["created_at"][:16]}',expanded=False):
+                status_label = "Stopped" if r["was_stopped"] else "Completed"
+                with st.expander(f'{status_label} - {r["save_name"]} | {r["processed"]:,} records | {r["created_at"][:16]}',expanded=False):
                     c1,c2,c3,c4=st.columns(4)
                     c1.metric("Processed",f"{r['processed']:,}"); c2.metric("Priority",f"{r['priority_count']:,}")
                     c3.metric("Blacklisted",f"{r['blacklisted']:,}"); c4.metric("Elapsed",r["elapsed"])
@@ -1329,29 +1546,41 @@ with tab_database:
                             file_name=f"{r['save_name']}_{r['run_id']}.csv",mime="text/csv",
                             key=f"dl_{r['run_id']}",use_container_width=True)
         st.markdown('<div class="hr2"></div>',unsafe_allow_html=True)
-        if st.button("Clear All Database",key="clrdb"): db_clear_all(); st.rerun()
+        if st.button("Clear All Database",key="clrdb",type="secondary"): db_clear_all(); st.rerun()
 
 
 # ━━━━━━━━━ TAB: SETTINGS ━━━━━━━━━
 with tab_settings:
     st.markdown('<div class="sec">Appearance</div>',unsafe_allow_html=True)
-    st.markdown(f'<div class="stat-cell" style="margin:0.5rem 0"><span class="sl">Current Theme</span>'
-                f'<span class="sv">{"Dark" if is_dark else "Light"}</span></div>',unsafe_allow_html=True)
-    st.caption("Use the button in the top-right to toggle theme.")
+    st.markdown(f'''<div class="stat-cell" style="margin:0.5rem 0">
+        <span class="sl">Current Theme</span>
+        <span class="sv">{"Dark Mode" if is_dark else "Light Mode"}</span>
+    </div>''',unsafe_allow_html=True)
+    st.caption("Use the button in the top-right corner to switch between dark and light themes.")
 
-    st.markdown('<div class="sec">System</div>',unsafe_allow_html=True)
+    st.markdown('<div class="sec">System Information</div>',unsafe_allow_html=True)
     st.markdown(f'''
     <div class="stat-grid">
-        <div class="stat-cell"><span class="sl">Platform</span><span class="sv">{os.name}</span></div>
-        <div class="stat-cell"><span class="sl">Selenium</span><span class="sv" style="color:{_green2 if SELENIUM_OK else _red2}!important">{"OK" if SELENIUM_OK else "Missing"}</span></div>
-        <div class="stat-cell"><span class="sl">psutil</span><span class="sv" style="color:{_green2 if PSUTIL_OK else _red2}!important">{"OK" if PSUTIL_OK else "Missing"}</span></div>
+        <div class="stat-cell"><span class="sl">Platform</span><span class="sv">{os.name.upper()}</span></div>
+        <div class="stat-cell"><span class="sl">Browser Engine</span><span class="sv" style="color:{_green2 if SELENIUM_OK else _red2}!important">{"Ready" if SELENIUM_OK else "Not Found"}</span></div>
+        <div class="stat-cell"><span class="sl">System Monitor</span><span class="sv" style="color:{_green2 if PSUTIL_OK else _red2}!important">{"Active" if PSUTIL_OK else "Not Found"}</span></div>
+        <div class="stat-cell"><span class="sl">RAM Available</span><span class="sv">{AVAILABLE_GB} GB</span></div>
+        <div class="stat-cell"><span class="sl">CPU Cores</span><span class="sv">{CPU_CORES}</span></div>
+        <div class="stat-cell"><span class="sl">Safe Bot Limit</span><span class="sv cv-green">{SMART_LIMIT}</span></div>
     </div>
     ''',unsafe_allow_html=True)
-    st.markdown('<div class="sec">About</div>',unsafe_allow_html=True)
-    st.markdown(f'<div style="text-align:center;padding:1.5rem;background:{_card};border:1px solid {_border};border-radius:12px;">'
-                f'<div style="font-size:1.4rem;font-weight:900;">3LINES DataHunter</div>'
-                f'<div style="font-size:0.8rem;color:{_muted}!important;margin-top:0.4rem;">v15.0 Elite &bull; Dual Filtering &bull; Auto-Retry &bull; Multi-Export</div></div>',
-                unsafe_allow_html=True)
 
-# Footer
-st.markdown(f'<div class="footer">3LINES DataHunter v15.0 &mdash; Real-Time Resource Auditing &bull; Dual Filtering &bull; Priority Targets &bull; Blacklist Exclusion</div>',unsafe_allow_html=True)
+    st.markdown('<div class="sec">About</div>',unsafe_allow_html=True)
+    st.markdown(f'''<div style="text-align:center; padding:2rem; background:{_glass_bg}; backdrop-filter:blur(12px);
+        border:1px solid {_glass_border}; border-radius:16px;">
+        <div style="font-size:1.6rem; font-weight:900; margin-bottom:0.5rem;">3LINES DataHunter</div>
+        <div style="font-size:0.82rem; color:{_muted}!important; line-height:1.8;">
+            v15.0 Elite Edition<br>
+            Smart Filtering &bull; Auto-Retry &bull; Multi-Format Export<br>
+            Priority Targets &bull; Blacklist Exclusion &bull; Auto-Save
+        </div>
+    </div>''', unsafe_allow_html=True)
+
+
+# ── Footer ──
+st.markdown(f'<div class="footer">3LINES DataHunter v15.0 &mdash; Automated Data Collection &bull; Smart Filtering &bull; One-Click Export</div>',unsafe_allow_html=True)
