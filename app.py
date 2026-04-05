@@ -1209,17 +1209,26 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ss = st.session_state
 
+# ── Load logo as base64 ──
+_logo_b64 = ""
+_logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo.png")
+if os.path.isfile(_logo_path):
+    with open(_logo_path, "rb") as _lf:
+        _logo_b64 = base64.b64encode(_lf.read()).decode()
+
+_logo_html = f'<img src="data:image/png;base64,{_logo_b64}" height="34" style="margin-right:8px;">' if _logo_b64 else ''
+
 # ── Header ──
 st.markdown(f'''
 <div class="elite-header">
     <div class="eh-brand">
-        <img src="https://3lines.com.sa/assets/logos/logo.png" height="32" style="filter:brightness(1.2);margin-right:4px;" onerror="this.style.display='none'">
+        {_logo_html}
         <div class="eh-logo">3LINES <b>DataHunter</b></div>
         <div class="eh-sep"></div>
         <div class="eh-sub">Automated Data Collection &mdash; Smart Filtering &mdash; One-Click Export</div>
     </div>
     <div class="eh-right">
-        <div class="eh-pill"><div class="dot"></div>RAM {AVAILABLE_GB}GB &bull; CPU {CPU_LOAD}% &bull; {SMART_LIMIT} Bots</div>
+        <div class="eh-pill"><div class="dot"></div>Server: {AVAILABLE_GB}GB Free &bull; {CPU_CORES} Cores &bull; {SMART_LIMIT} Safe Bots</div>
         <div class="eh-ver">v16.0</div>
     </div>
 </div>
@@ -1472,7 +1481,7 @@ with tab_dashboard:
     d3.markdown(rmetric("Priority Found", f"{stats['total_priority']:,}", "p"), unsafe_allow_html=True)
     d4.markdown(rmetric("Total Errors", f"{stats['total_errors']:,}", "r"), unsafe_allow_html=True)
 
-    st.markdown('<div class="sec">System Health</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec">Server Resources</div>', unsafe_allow_html=True)
     ram_pct = round(((TOTAL_GB-AVAILABLE_GB)/TOTAL_GB)*100) if TOTAL_GB>0 else 0
     cpu_color = _red2 if CPU_LOAD>80 else (_yellow2 if CPU_LOAD>60 else _green2)
     ram_color = _red2 if ram_pct>80 else (_yellow2 if ram_pct>60 else _green2)
