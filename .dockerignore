@@ -1,0 +1,29 @@
+# Excel files
+*.xlsx
+*.xls
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.vscode/
+.idea/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# Other
+*.bat
+*.md
+nul
+client/
+server/
+~$*
