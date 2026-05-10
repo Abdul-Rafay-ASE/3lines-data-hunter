@@ -117,37 +117,31 @@ def init_local_db():
             result_data TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_run_results ON run_results(run_id);
+
+        -- Per-stock progress, written live during a run so an interrupted run
+        -- can be resumed (or at minimum, not lost). Source of truth while a
+        -- run is in_progress; finalize copies result_data into run_results
+        -- so existing dashboard/export queries are unchanged.
+        CREATE TABLE IF NOT EXISTS run_progress (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id       TEXT,
+            stock_number TEXT,
+            status       TEXT,           -- 'ok' | 'err' | 'dead'
+            scraped_at   TEXT,
+            result_data  TEXT             -- JSON, NULL when status != 'ok'
+        );
+        CREATE INDEX IF NOT EXISTS idx_run_progress_run ON run_progress(run_id);
+        CREATE INDEX IF NOT EXISTS idx_run_progress_stock ON run_progress(run_id, stock_number);
     """)
-    conn.commit()
-    conn.close()
-
-
-def db_save_run(run_id, save_name, total_stocks, processed,
-                priority_count, blacklisted, errors, elapsed, was_stopped, results):
-    conn = _get_db()
-    conn.execute(
-        """INSERT OR REPLACE INTO runs
-           (run_id, created_at, status, save_name, total_stocks, processed,
-            priority_count, blacklisted, errors, elapsed, was_stopped)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (run_id, datetime.now().isoformat(), "completed",
-         save_name, total_stocks, processed,
-         priority_count, blacklisted, errors, elapsed, int(was_stopped)),
-    )
-    if results:
-        conn.execute("DELETE FROM run_results WHERE run_id=?", (run_id,))
-        conn.executemany(
-            "INSERT INTO run_results (run_id, stock_number, result_data) VALUES (?, ?, ?)",
-            [(run_id, r.get("Stock Number", ""), json.dumps(r, ensure_ascii=False))
-             for r in results],
-        )
     conn.commit()
     conn.close()
 
 
 def db_get_all_runs():
     conn = _get_db()
-    rows = conn.execute("SELECT * FROM runs ORDER BY created_at DESC").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM runs WHERE status != 'in_progress' ORDER BY created_at DESC"
+    ).fetchall()
     result = [dict(r) for r in rows]
     conn.close()
     return result
@@ -191,6 +185,7 @@ def db_get_total_stats():
                COALESCE(SUM(errors), 0) as total_errors,
                (SELECT COUNT(*) FROM run_results) as total_records
         FROM runs
+        WHERE status != 'in_progress'
     """).fetchone()
     result = dict(row)
     conn.close()
@@ -208,7 +203,134 @@ def db_delete_run(run_id):
 def db_clear_all():
     conn = _get_db()
     conn.execute("DELETE FROM run_results")
+    conn.execute("DELETE FROM run_progress")
     conn.execute("DELETE FROM runs")
+    conn.commit()
+    conn.close()
+
+
+def db_start_run(run_id, save_name, total_stocks):
+    """Create a runs row at status='in_progress' so an interrupted run is
+    visible on next launch. Idempotent on resume — uses INSERT OR IGNORE
+    so a resumed run keeps its original created_at and total_stocks."""
+    conn = _get_db()
+    conn.execute(
+        """INSERT OR IGNORE INTO runs
+           (run_id, created_at, status, save_name, total_stocks, processed)
+           VALUES (?, ?, 'in_progress', ?, ?, 0)""",
+        (run_id, datetime.now().isoformat(), save_name, total_stocks),
+    )
+    conn.execute(
+        "UPDATE runs SET status='in_progress' WHERE run_id=?",
+        (run_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def db_record_stock(run_id, stock_number, status, result_dict=None):
+    """Persist a single stock's outcome. Called from inside worker threads
+    once per stock; SQLite WAL handles concurrent writers."""
+    payload = json.dumps(result_dict, ensure_ascii=False) if result_dict else None
+    try:
+        conn = _get_db()
+        conn.execute(
+            """INSERT INTO run_progress
+               (run_id, stock_number, status, scraped_at, result_data)
+               VALUES (?, ?, ?, ?, ?)""",
+            (run_id, str(stock_number), status, datetime.now().isoformat(), payload),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        # Per-stock persistence failure must not abort the worker; log and
+        # continue. Result is still in the in-memory results list and will
+        # be picked up by the existing autosave / finalize paths.
+        logger.exception("db_record_stock failed for run=%s stock=%s", run_id, stock_number)
+
+
+def db_get_unfinished_runs(min_age_minutes=5):
+    """Return runs still marked in_progress and at least min_age_minutes old.
+    The age guard prevents the banner from firing on a run that's actively
+    executing in another browser tab / process."""
+    cutoff = (datetime.now() - timedelta(minutes=min_age_minutes)).isoformat()
+    conn = _get_db()
+    rows = conn.execute(
+        """SELECT run_id, created_at, save_name, total_stocks, processed
+           FROM runs WHERE status='in_progress' AND created_at < ?
+           ORDER BY created_at DESC""",
+        (cutoff,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def db_get_run_progress_stocks(run_id):
+    """Set of normalized stock numbers already recorded under this run."""
+    conn = _get_db()
+    rows = conn.execute(
+        "SELECT DISTINCT stock_number FROM run_progress WHERE run_id=?",
+        (run_id,),
+    ).fetchall()
+    conn.close()
+    return {str(r["stock_number"]).replace("-", "").strip() for r in rows if r["stock_number"]}
+
+
+def db_get_run_progress_results(run_id):
+    """List of successfully-scraped result dicts recorded under this run.
+    Used to seed the in-memory results list when resuming a run."""
+    conn = _get_db()
+    rows = conn.execute(
+        """SELECT result_data FROM run_progress
+           WHERE run_id=? AND status='ok' AND result_data IS NOT NULL
+           ORDER BY id""",
+        (run_id,),
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        try:
+            out.append(json.loads(r["result_data"]))
+        except Exception:
+            logger.exception("Failed to decode run_progress.result_data for run=%s", run_id)
+    return out
+
+
+def db_finalize_run(run_id, save_name, total_stocks, processed,
+                    priority_count, blacklisted, errors, elapsed,
+                    was_stopped, results):
+    """Mark a run terminal and copy results into run_results so the
+    dashboard / export code (which reads run_results) is unchanged."""
+    final_status = "stopped" if was_stopped else "completed"
+    conn = _get_db()
+    conn.execute(
+        """UPDATE runs
+           SET status=?, save_name=?, total_stocks=?, processed=?,
+               priority_count=?, blacklisted=?, errors=?, elapsed=?, was_stopped=?
+           WHERE run_id=?""",
+        (final_status, save_name, total_stocks, processed,
+         priority_count, blacklisted, errors, elapsed,
+         int(was_stopped), run_id),
+    )
+    if results:
+        conn.execute("DELETE FROM run_results WHERE run_id=?", (run_id,))
+        conn.executemany(
+            "INSERT INTO run_results (run_id, stock_number, result_data) VALUES (?, ?, ?)",
+            [(run_id, r.get("Stock Number", ""), json.dumps(r, ensure_ascii=False))
+             for r in results],
+        )
+    conn.commit()
+    conn.close()
+
+
+def db_discard_run(run_id):
+    """Fully remove an unfinished run: drops its progress rows, any partial
+    run_results rows, and the runs row itself. The user explicitly chose to
+    discard, so we leave no trace in the dashboard."""
+    conn = _get_db()
+    conn.execute("DELETE FROM run_progress WHERE run_id=?", (run_id,))
+    conn.execute("DELETE FROM run_results WHERE run_id=?", (run_id,))
+    conn.execute("DELETE FROM runs WHERE run_id=?", (run_id,))
     conn.commit()
     conn.close()
 
@@ -333,6 +455,7 @@ defaults = dict(
     autosave_bytes=None, autosave_name="",
     stock_count=0, file_bytes=None, final_log=[],
     perf_data=[], failed_stocks=[], final_data=[], auto_downloaded=False,
+    resume_run_id="",  # set when user clicks Resume on the unfinished-run banner
 )
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -1327,15 +1450,60 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
             ss.running=False; ss.completed=True; ss.stopped=False; return
 
     if 0 < limit < len(stocks): stocks = stocks[:limit]
-    total = len(stocks); ss.target = total; t0 = time.time(); ss.start_time = t0
-    logger.info("Run started: total=%d, workers=%d, target_url=%s, skip_recent=%s, skipped=%d",
-                total, num_workers, target_url, skip_recent, skipped_count)
-    if skipped_count:
+    total_uploaded = len(stocks)
+
+    # ── Resume support ──
+    # If the user clicked "Resume" on the unfinished-run banner, ss.resume_run_id
+    # is set. We reuse that run_id, filter out stocks already 'ok' under it, and
+    # seed in-memory results from run_progress so the live UI / final export
+    # reflect the full run (old + new). Stocks that were 'err'/'dead' are
+    # retried — their old progress rows are cleared first.
+    save_name = ss.get("custom_name", "3LINES_Results").strip() or "3LINES_Results"
+    seed_results = []
+    seed_priority = 0
+    seed_blacklisted = 0
+    resume_run_id = (ss.get("resume_run_id") or "").strip()
+    if resume_run_id:
+        try:
+            already_ok = db_get_run_progress_stocks(resume_run_id)
+            seed_results = db_get_run_progress_results(resume_run_id)
+            for r in seed_results:
+                if row_has_priority(r, priority_targets): seed_priority += 1
+            # Wipe old non-'ok' progress rows so retried stocks land cleanly.
+            _conn = _get_db()
+            _conn.execute("DELETE FROM run_progress WHERE run_id=? AND status != 'ok'", (resume_run_id,))
+            _conn.commit(); _conn.close()
+            run_id = resume_run_id
+            before = len(stocks)
+            stocks = [s for s in stocks if s not in already_ok]
+            resumed_skipped = before - len(stocks)
+            logger.info("Resume: run=%s, %d already-ok skipped, %d to scrape", run_id, resumed_skipped, len(stocks))
+        except Exception:
+            logger.exception("Resume setup failed for run=%s; starting fresh", resume_run_id)
+            run_id = f"run_{datetime.now():%Y%m%d_%H%M%S}"
+            seed_results = []; seed_priority = 0; seed_blacklisted = 0
+    else:
+        run_id = f"run_{datetime.now():%Y%m%d_%H%M%S}"
+
+    total = len(stocks) + len(seed_results)
+    ss.target = total; t0 = time.time(); ss.start_time = t0
+    logger.info("Run started: run_id=%s, total=%d (uploaded=%d, seeded=%d), workers=%d, target_url=%s, skip_recent=%s, skipped=%d",
+                run_id, total, total_uploaded, len(seed_results), num_workers, target_url, skip_recent, skipped_count)
+    try:
+        db_start_run(run_id, save_name, total)
+    except Exception:
+        logger.exception("db_start_run failed; in-memory run continues without progress persistence")
+
+    if resume_run_id and seed_results:
+        status_ph.markdown(f'<div class="sbox">Resuming run: {len(seed_results):,} already complete, {len(stocks):,} remaining.</div>', unsafe_allow_html=True)
+    elif skipped_count:
         status_ph.markdown(f'<div class="sbox">Smart-skip: {skipped_count:,} stock(s) skipped (already scraped in last 24h). Processing {total:,}.</div>', unsafe_allow_html=True)
 
-    lock = threading.Lock(); results = []
-    ctr = {"done":0,"priority":0,"blacklisted":0,"errors":0}
-    last_as = {"count":0}; log_entries = deque(maxlen=MAX_LOG_LINES)
+    lock = threading.Lock()
+    results = list(seed_results)
+    ctr = {"done": len(seed_results), "priority": seed_priority,
+           "blacklisted": seed_blacklisted, "errors": 0}
+    last_as = {"count": ctr["done"]}; log_entries = deque(maxlen=MAX_LOG_LINES)
     perf_pts = []; failed = []
 
     def do_autosave():
@@ -1403,9 +1571,11 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                             if bl>0: log_entries.append({"bot":wid,"stock":stk,"status":"blocked","num":rn})
                             if ip: ctr["priority"]+=1; log_entries.append({"bot":wid,"stock":stk,"status":"priority","num":rn})
                             else: log_entries.append({"bot":wid,"stock":stk,"status":"ok","num":rn})
+                        db_record_stock(run_id, stk, "ok", res)
                     elif status=="dead":
                         consecutive_errors += 1
                         with lock: log_entries.append({"bot":wid,"stock":stk,"status":"dead","num":rn}); failed.append(stk)
+                        db_record_stock(run_id, stk, "dead")
                         restarts+=1
                         logger.warning("Worker %d: dead driver on stock %s (restart #%d)", wid, stk, restarts)
                         if restarts>10:
@@ -1422,11 +1592,13 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                             if res: results.append(res)
                             ctr["done"]+=1; ctr["errors"]+=1; failed.append(stk)
                             log_entries.append({"bot":wid,"stock":stk,"status":"err","num":rn})
+                        db_record_stock(run_id, stk, "err", res if res else None)
                 except Exception:
                     logger.exception("Worker %d: unexpected error scraping stock %s", wid, stk)
                     consecutive_errors += 1
                     with lock: ctr["done"]+=1; ctr["errors"]+=1; failed.append(stk)
                     log_entries.append({"bot":wid,"stock":stk,"status":"err","num":rn})
+                    db_record_stock(run_id, stk, "err")
         except Exception:
             logger.exception("Worker %d: chunk loop terminated by exception", wid)
         finally:
@@ -1435,14 +1607,24 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                 logger.debug("Worker %d: best-effort final quit failed", wid, exc_info=True)
             logger.info("Worker %d: finished", wid)
 
-    cs=max(1,total//num_workers); chunks=[]; sis=[]
-    for i in range(num_workers):
-        s=i*cs; e=s+cs if i<num_workers-1 else total
-        if s<total: chunks.append(stocks[s:e]); sis.append(s)
+    n_to_scrape = len(stocks)
+    chunks=[]; sis=[]
+    if n_to_scrape > 0:
+        cs = max(1, n_to_scrape // num_workers)
+        for i in range(num_workers):
+            s = i*cs; e = s+cs if i < num_workers-1 else n_to_scrape
+            if s < n_to_scrape:
+                chunks.append(stocks[s:e]); sis.append(s)
     with stop_ph:
         if st.button("STOP & SAVE",use_container_width=True,key="stop_btn"): stop_flag.set()
-    pool=ThreadPoolExecutor(max_workers=len(chunks))
-    futs={pool.submit(worker,i+1,ch,si):i+1 for i,(ch,si) in enumerate(zip(chunks,sis))}
+    if chunks:
+        pool=ThreadPoolExecutor(max_workers=len(chunks))
+        futs={pool.submit(worker,i+1,ch,si):i+1 for i,(ch,si) in enumerate(zip(chunks,sis))}
+    else:
+        # Resume case: nothing left to scrape; jump straight to finalize.
+        pool = None
+        futs = {}
+        logger.info("Resume: nothing remaining to scrape; finalizing")
     try:
         while any(not f.done() for f in futs):
             time.sleep(1)
@@ -1499,6 +1681,15 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                             results.append(res); ctr["blacklisted"]+=bl
                             if row_has_priority(res,priority_targets): ctr["priority"]+=1
                             ctr["errors"]=max(0,ctr["errors"]-1)
+                        # Replace any prior err/dead row for this stock with an 'ok' row.
+                        try:
+                            _c = _get_db()
+                            _c.execute("DELETE FROM run_progress WHERE run_id=? AND stock_number=?",
+                                       (run_id, str(stk)))
+                            _c.commit(); _c.close()
+                        except Exception:
+                            logger.exception("Retry pass: failed to clear prior progress row for %s", stk)
+                        db_record_stock(run_id, stk, "ok", res)
                 except Exception:
                     logger.exception("Retry pass: failed to scrape %s", stk)
             rd2.quit()
@@ -1524,18 +1715,21 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
             ss.processed=d; ss.priority_matches=p; ss.blacklisted=bl; ss.errors=e
     else: ss.processed=d; ss.priority_matches=p; ss.blacklisted=bl; ss.errors=e
     ss.final_log=list(ls); ss.running=False; ss.completed=True; ss.stopped=was_stopped
-    pool.shutdown(wait=False)
+    if pool is not None:
+        pool.shutdown(wait=False)
     em3,es3=divmod(int(elapsed),60); eh3,em3=divmod(em3,60)
     ed=f"{eh3}h {em3:02d}m {es3:02d}s" if eh3 else f"{em3}m {es3:02d}s"
     ss.run_history.append({"date":datetime.now().strftime("%Y-%m-%d %H:%M"),"records":ss.processed,
         "total":total,"priority":ss.priority_matches,"blacklisted":ss.blacklisted,
         "errors":ss.errors,"elapsed":ed,"stopped":was_stopped})
     try:
-        rid=f"run_{datetime.now():%Y%m%d_%H%M%S}"
-        sn=ss.get("custom_name","3LINES_Results").strip() or "3LINES_Results"
-        db_save_run(rid,sn,total,ss.processed,ss.priority_matches,ss.blacklisted,ss.errors,ed,was_stopped,final)
+        db_finalize_run(run_id, save_name, total,
+                        ss.processed, ss.priority_matches, ss.blacklisted, ss.errors,
+                        ed, was_stopped, final)
     except Exception:
-        logger.exception("DB save_run failed; results stay in session only")
+        logger.exception("db_finalize_run failed; results stay in session only")
+    # Clear resume flag — the run has been finalized one way or another.
+    ss.resume_run_id = ""
     logger.info("Run finished: processed=%d, priority=%d, blacklisted=%d, errors=%d, failed=%d, elapsed=%s, stopped=%s",
                 ss.processed, ss.priority_matches, ss.blacklisted, ss.errors,
                 len(final_failed), ed, was_stopped)
@@ -1595,6 +1789,46 @@ tab_scraper, tab_dashboard, tab_database, tab_settings = st.tabs([
 
 # ━━━━━━━━━ TAB: SCRAPER ━━━━━━━━━
 with tab_scraper:
+
+    # ── Unfinished-run banner ──
+    # Surface any in_progress run older than 5 minutes so a crashed/closed
+    # session can be resumed. No auto-resume — user must click Resume to opt in.
+    if not ss.running:
+        try:
+            _unfinished = db_get_unfinished_runs(min_age_minutes=5)
+        except Exception:
+            logger.exception("Failed to query unfinished runs")
+            _unfinished = []
+        for _ur in _unfinished:
+            _ur_id = _ur["run_id"]
+            _processed = _ur.get("processed", 0) or 0
+            _total = _ur.get("total_stocks", 0) or 0
+            _name = _ur.get("save_name") or "(untitled)"
+            _when = (_ur.get("created_at") or "")[:16].replace("T", " ")
+            with st.container():
+                st.warning(
+                    f"**Unfinished run detected:** `{_name}` — "
+                    f"{_processed:,}/{_total:,} stocks recorded, started {_when}. "
+                    "Re-upload the original file and click Resume to continue, or Discard to dismiss."
+                )
+                _bc1, _bc2, _ = st.columns([1, 1, 6])
+                with _bc1:
+                    if st.button("Resume", key=f"resume_{_ur_id}", use_container_width=True):
+                        ss.resume_run_id = _ur_id
+                        logger.info("User clicked Resume for run %s", _ur_id)
+                        st.rerun()
+                with _bc2:
+                    if st.button("Discard", key=f"discard_{_ur_id}", use_container_width=True):
+                        try:
+                            db_discard_run(_ur_id)
+                            logger.info("User discarded unfinished run %s", _ur_id)
+                        except Exception:
+                            logger.exception("Failed to discard run %s", _ur_id)
+                        if ss.get("resume_run_id") == _ur_id:
+                            ss.resume_run_id = ""
+                        st.rerun()
+        if ss.get("resume_run_id"):
+            st.info(f"Ready to resume run `{ss.resume_run_id}` — upload the original Excel file below to continue.")
 
     # Step indicators at the top
     has_file = ss.get("file_bytes") is not None or ss.completed
