@@ -19,9 +19,13 @@ import base64
 import shutil
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    TimeoutError as _FuturesTimeoutError,
+    as_completed,
+)
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 
@@ -160,6 +164,24 @@ def db_clear_all():
 
 init_local_db()
 
+
+def db_get_recently_scraped_stocks(within_hours=24):
+    """Return a set of stock numbers that were saved to the DB within the
+    given window. Used by the optional smart-skip feature to avoid redoing
+    recent successful work. Stocks are matched in their normalized form."""
+    cutoff = (datetime.now() - timedelta(hours=within_hours)).isoformat()
+    conn = _get_db()
+    rows = conn.execute(
+        """SELECT DISTINCT rr.stock_number
+           FROM run_results rr
+           JOIN runs r ON r.run_id = rr.run_id
+           WHERE r.created_at >= ?""",
+        (cutoff,),
+    ).fetchall()
+    conn.close()
+    return {str(r["stock_number"]).replace("-", "").strip() for r in rows if r["stock_number"]}
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  SYSTEM RESOURCES
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -211,6 +233,45 @@ except ImportError:
 # ── Page Config ──
 st.set_page_config(page_title="3LINES DataHunter", page_icon="3L",
                    layout="wide", initial_sidebar_state="collapsed")
+
+# ── Optional Password Gate ──
+# Best-effort load of a local .env so DH_PASSWORD (and other DH_* vars) are
+# picked up during local development. Production deployments typically inject
+# env vars directly and won't have python-dotenv as a hard requirement.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+_DH_PASSWORD = os.environ.get("DH_PASSWORD", "").strip()
+if _DH_PASSWORD:
+    if not st.session_state.get("_dh_authenticated"):
+        st.markdown("## 3LINES DataHunter")
+        st.caption("Enter the access password to continue.")
+        with st.form("_dh_login", clear_on_submit=False):
+            _pw = st.text_input("Password", type="password")
+            _ok = st.form_submit_button("Sign in")
+        if _ok:
+            if _pw == _DH_PASSWORD:
+                st.session_state["_dh_authenticated"] = True
+                st.rerun()
+            else:
+                st.error("Incorrect password.")
+        st.stop()
+
+# ── Runtime Configuration (from env vars, with safe defaults) ──
+def _env_int(name, default):
+    try:
+        v = os.environ.get(name, "").strip()
+        return int(v) if v else default
+    except (TypeError, ValueError):
+        return default
+
+DH_DEFAULT_URL       = os.environ.get("DEFAULT_TARGET_URL", "").strip() or "https://www.lqlite.com"
+DH_MAX_BOTS          = max(1, _env_int("DH_MAX_BOTS", 10))
+DH_AUTOSAVE_INTERVAL = max(1, _env_int("DH_AUTOSAVE_INTERVAL", 50))
+DH_PER_STOCK_TIMEOUT = max(10, _env_int("DH_PER_STOCK_TIMEOUT", 60))
 
 # ── Session State ──
 defaults = dict(
@@ -773,9 +834,9 @@ div[data-testid="stDownloadButton"] button p {{ color: #fff !important; }}
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CONSTANTS & EXCEL STYLES
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DEFAULT_URL = "https://www.lqlite.com"
+DEFAULT_URL = DH_DEFAULT_URL
 STATIC_BLACKLIST = ["A486G", "FINLAND"]
-AUTOSAVE_INTERVAL = 50
+AUTOSAVE_INTERVAL = DH_AUTOSAVE_INTERVAL
 MINUTES_PER_ITEM_MANUAL = 2
 MAX_LOG_LINES = 30
 
@@ -1064,6 +1125,29 @@ def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_compani
         return {"Stock Number": s, "P.NO 1": "", "MFG 1": ""}, "err", 0
 
 
+def scrape_one_with_timeout(drv, wt, stock, target_url, priority_targets,
+                            blacklisted_companies, timeout_s):
+    """Wall-clock wrapper around scrape_one. If a single stock exceeds
+    timeout_s, the call is abandoned and we return ("dead", 0) so the worker's
+    existing dead-handling path will reboot the driver and continue.
+
+    The runaway thread inside the inner pool is left to clean up on its own
+    when the underlying selenium call eventually returns; we shut the pool
+    down without waiting so the worker thread is not blocked.
+    """
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="dh-to")
+    try:
+        fut = pool.submit(scrape_one, drv, wt, stock, target_url,
+                          priority_targets, blacklisted_companies)
+        try:
+            return fut.result(timeout=timeout_s)
+        except _FuturesTimeoutError:
+            return None, "dead", 0
+    finally:
+        # wait=False so a hung scrape doesn't trap the worker.
+        pool.shutdown(wait=False)
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  EXCEL / CSV / JSON BUILDERS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1119,6 +1203,23 @@ def build_json(data, pt, bl):
     return json.dumps(rows, indent=2, ensure_ascii=False).encode("utf-8")
 
 
+def build_failed_excel(failed_stocks):
+    """Single-column XLSX listing the stocks that did not produce a result
+    (after the retry pass). Returns bytes, or None if there's nothing to export."""
+    if not failed_stocks: return None
+    wb = Workbook(); ws = wb.active; ws.title = "Failed Stocks"
+    cell = ws.cell(row=1, column=1, value="Stock Number")
+    cell.font = H_FONT; cell.fill = H_FILL; cell.border = BDR
+    cell.alignment = Alignment(horizontal='center', vertical='center')
+    for i, stk in enumerate(failed_stocks, 2):
+        c = ws.cell(row=i, column=1, value=str(stk))
+        c.border = BDR; c.font = Font(size=10); c.number_format = '@'
+    ws.column_dimensions['A'].width = 22
+    ws.freeze_panes = 'A2'
+    buf = io.BytesIO(); wb.save(buf); wb.close(); buf.seek(0)
+    return buf.getvalue()
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  UI RENDERERS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1145,7 +1246,8 @@ def rmetric(label, value, color="g"):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def run_scraper(file_bytes, num_workers, limit, target_url,
         priority_targets, blacklisted_companies,
-        stop_flag, status_ph, bar_ph, m1, m2, m3, m4, m5, stop_ph, log_ph):
+        stop_flag, status_ph, bar_ph, m1, m2, m3, m4, m5, stop_ph, log_ph,
+        skip_recent=False):
     ss = st.session_state
     ss.running=True; ss.completed=False; ss.stopped=False
     ss.processed=0; ss.priority_matches=0; ss.blacklisted=0; ss.errors=0
@@ -1155,8 +1257,27 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
     stocks, err_msg = load_stocks_strict(file_bytes)
     if not stocks:
         status_ph.error(err_msg or "\u274c Invalid file"); ss.running=False; return
+
+    # Optional smart-skip: drop stocks already in the DB from a successful run
+    # within the last 24h. Off by default (opt-in via the Advanced Settings checkbox).
+    skipped_count = 0
+    if skip_recent:
+        try:
+            recent = db_get_recently_scraped_stocks(within_hours=24)
+            if recent:
+                before = len(stocks)
+                stocks = [s for s in stocks if s not in recent]
+                skipped_count = before - len(stocks)
+        except Exception:
+            skipped_count = 0
+        if not stocks:
+            status_ph.markdown('<div class="sbox">All stocks were scraped recently \u2014 nothing to do. Disable smart-skip to re-run them.</div>', unsafe_allow_html=True)
+            ss.running=False; ss.completed=True; ss.stopped=False; return
+
     if 0 < limit < len(stocks): stocks = stocks[:limit]
     total = len(stocks); ss.target = total; t0 = time.time(); ss.start_time = t0
+    if skipped_count:
+        status_ph.markdown(f'<div class="sbox">Smart-skip: {skipped_count:,} stock(s) skipped (already scraped in last 24h). Processing {total:,}.</div>', unsafe_allow_html=True)
 
     lock = threading.Lock(); results = []
     ctr = {"done":0,"priority":0,"blacklisted":0,"errors":0}
@@ -1212,7 +1333,7 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
 
                 with lock: log_entries.append({"bot":wid,"stock":stk,"status":"start","num":rn})
                 try:
-                    res,status,bl = scrape_one(drv,wt,stk,target_url,priority_targets,blacklisted_companies)
+                    res,status,bl = scrape_one_with_timeout(drv,wt,stk,target_url,priority_targets,blacklisted_companies,DH_PER_STOCK_TIMEOUT)
                     if status=="ok" and res and res.get("Stock Number","").strip():
                         consecutive_errors = 0  # Reset on success
                         ip=row_has_priority(res,priority_targets)
@@ -1290,15 +1411,17 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
     # Auto-retry
     if not was_stopped: was_stopped=stop_flag.is_set()
     with lock: retry_s=list(set(failed))
+    recovered_in_retry = set()
     if retry_s and not was_stopped and len(retry_s)<=total*0.5:
         status_ph.markdown(f'<div class="sbox">Retrying <b>{len(retry_s)}</b> failed...</div>',unsafe_allow_html=True)
         try:
             rd2=make_driver(); rw2=WebDriverWait(rd2,15); rd2.get(target_url); time.sleep(3)
-            for ri,stk in enumerate(retry_s):
+            for stk in retry_s:
                 if stop_flag.is_set(): break
                 try:
-                    res,status,bl=scrape_one(rd2,rw2,stk,target_url,priority_targets,blacklisted_companies)
+                    res,status,bl=scrape_one_with_timeout(rd2,rw2,stk,target_url,priority_targets,blacklisted_companies,DH_PER_STOCK_TIMEOUT)
                     if status=="ok" and res and res.get("Stock Number","").strip():
+                        recovered_in_retry.add(stk)
                         with lock:
                             results[:]=[r for r in results if r.get("Stock Number","")!=stk or r.get("P.NO 1","")!=""]
                             results.append(res); ctr["blacklisted"]+=bl
@@ -1310,6 +1433,8 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
 
     # Finalize
     with lock: final=list(results); d,p,bl,e=ctr["done"],ctr["priority"],ctr["blacklisted"],ctr["errors"]; ls=list(log_entries)
+    final_failed = sorted(set(failed) - recovered_in_retry)
+    ss.failed_stocks = final_failed
     elapsed=time.time()-t0; ss.elapsed=elapsed; ss.perf_data=perf_pts; ss.final_data=final
     if final:
         try:
@@ -1444,6 +1569,12 @@ with tab_scraper:
         with f2:
             blacklist_input = st.text_input("Blacklisted Companies", value="", placeholder="e.g. HARSCO, ACME")
             st.markdown('<p class="blwarn">Blacklist adds extra processing time.</p>', unsafe_allow_html=True)
+        skip_recent_chk = st.checkbox(
+            "Skip stocks already successfully scraped within the last 24 hours",
+            value=False,
+            key="skip_recent_chk",
+            help="OFF by default. When ON, stocks already in the local database from a successful run within the last 24h are skipped — useful when resuming a partial job.",
+        )
         priority_targets = parse_comma_list(priority_input)
         blacklisted_companies = parse_comma_list(blacklist_input)
 
@@ -1464,11 +1595,18 @@ with tab_scraper:
         st.markdown('<div class="sec">Step 2 - Choose Speed</div>', unsafe_allow_html=True)
         if "num_bots" not in ss: ss.num_bots = SMART_LIMIT
         if "speed_mode" not in ss: ss.speed_mode = "safe"
+        # Each preset's bot count is capped at DH_MAX_BOTS so deployments can
+        # tighten the ceiling via env var without code changes. "Maximum" maps
+        # to whatever the configured cap is.
+        _b_slow   = min(1,  DH_MAX_BOTS)
+        _b_safe   = min(3,  DH_MAX_BOTS)
+        _b_medium = min(6,  DH_MAX_BOTS)
+        _b_fast   = DH_MAX_BOTS
         spm = {
-            "slow":   {"b":1,  "l":"Careful",     "e":"\U0001f422", "d":"1 bot - safest"},
-            "safe":   {"b":3,  "l":"Recommended", "e":"\U0001f6e1\ufe0f",  "d":"3 bots - stable"},
-            "medium": {"b":6,  "l":"Faster",      "e":"\u26a1",     "d":"6 bots - quicker"},
-            "fast":   {"b":10, "l":"Maximum",     "e":"\U0001f680", "d":"10 bots - full power"},
+            "slow":   {"b":_b_slow,   "l":"Careful",     "e":"\U0001f422",       "d":f"{_b_slow} bot{'s' if _b_slow>1 else ''} - safest"},
+            "safe":   {"b":_b_safe,   "l":"Recommended", "e":"\U0001f6e1\ufe0f", "d":f"{_b_safe} bot{'s' if _b_safe>1 else ''} - stable"},
+            "medium": {"b":_b_medium, "l":"Faster",      "e":"\u26a1",           "d":f"{_b_medium} bot{'s' if _b_medium>1 else ''} - quicker"},
+            "fast":   {"b":_b_fast,   "l":"Maximum",     "e":"\U0001f680",       "d":f"{_b_fast} bot{'s' if _b_fast>1 else ''} - full power"},
         }
         s1,s2,s3,s4 = st.columns(4)
         for col,mk in zip([s1,s2,s3,s4],["slow","safe","medium","fast"]):
@@ -1522,7 +1660,8 @@ with tab_scraper:
         if start_btn and not ss.running and not ss.completed:
             try:
                 run_scraper(file_bytes,num_bots,process_limit,target_url,priority_targets,blacklisted_companies,
-                    ss.stop_flag,status_ph,progress_bar,m1_ph,m2_ph,m3_ph,m4_ph,m5_ph,stop_ph,log_ph)
+                    ss.stop_flag,status_ph,progress_bar,m1_ph,m2_ph,m3_ph,m4_ph,m5_ph,stop_ph,log_ph,
+                    skip_recent=bool(skip_recent_chk))
                 st.rerun()
             except Exception as e:
                 ss.running=False; st.error(f"Crashed: {e}")
@@ -1589,6 +1728,19 @@ with tab_scraper:
             with d3:
                 jv=build_json(ss.final_data,priority_targets,blacklisted_companies)
                 if jv: st.download_button(f"Download JSON",data=jv,file_name=ss.output_name.replace(".xlsx",".json"),mime="application/json",use_container_width=True)
+            # Failed-stocks export — only shown when at least one stock failed
+            # to produce a result after the retry pass.
+            if ss.failed_stocks:
+                _failed_xlsx = build_failed_excel(ss.failed_stocks)
+                if _failed_xlsx:
+                    st.download_button(
+                        f"Download Failed Stocks ({len(ss.failed_stocks):,})",
+                        data=_failed_xlsx,
+                        file_name=ss.output_name.replace(".xlsx", "_FAILED.xlsx"),
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        help="Stocks that did not produce a result, even after the auto-retry pass. Re-feed this file into the Scraper tab to try again.",
+                    )
         else:
             st.error(f"No results found. Errors: {ss.errors:,} | Time: {int(elapsed)}s")
         if st.button("Run Again",use_container_width=True, type="primary"):
