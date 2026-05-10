@@ -19,6 +19,8 @@ import base64
 import shutil
 import sqlite3
 import threading
+import logging
+from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
 from collections import deque
 from concurrent.futures import (
@@ -28,6 +30,55 @@ from concurrent.futures import (
 )
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  LOGGING
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Module-level logger. Console handler is always attached; file handler is
+# attached when DH_LOG_DIR is writable. Both controllable via env:
+#   DH_LOG_LEVEL  default INFO; "DISABLED" or empty disables file logging.
+#   DH_LOG_DIR    default "logs" (relative to app.py).
+def _configure_logger():
+    lvl_name = (os.environ.get("DH_LOG_LEVEL") or "INFO").strip().upper()
+    log = logging.getLogger("datahunter")
+    log.propagate = False
+    if log.handlers:
+        return log  # already configured (e.g. on Streamlit reload)
+    fmt = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    if lvl_name in ("", "DISABLED"):
+        log.setLevel(logging.WARNING)
+        sh = logging.StreamHandler()
+        sh.setFormatter(fmt)
+        log.addHandler(sh)
+        return log
+    try:
+        log.setLevel(getattr(logging, lvl_name, logging.INFO))
+    except Exception:
+        log.setLevel(logging.INFO)
+    sh = logging.StreamHandler()
+    sh.setFormatter(fmt)
+    log.addHandler(sh)
+    log_dir = os.environ.get("DH_LOG_DIR", "logs").strip() or "logs"
+    if not os.path.isabs(log_dir):
+        log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), log_dir)
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        fh = RotatingFileHandler(
+            os.path.join(log_dir, "datahunter.log"),
+            maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8",
+        )
+        fh.setFormatter(fmt)
+        log.addHandler(fh)
+    except Exception as _e:
+        log.warning("File logging disabled (%s): %s", log_dir, _e)
+    return log
+
+
+logger = _configure_logger()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1271,11 +1322,14 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
         except Exception:
             skipped_count = 0
         if not stocks:
+            logger.info("Smart-skip: all stocks were scraped recently; nothing to do")
             status_ph.markdown('<div class="sbox">All stocks were scraped recently \u2014 nothing to do. Disable smart-skip to re-run them.</div>', unsafe_allow_html=True)
             ss.running=False; ss.completed=True; ss.stopped=False; return
 
     if 0 < limit < len(stocks): stocks = stocks[:limit]
     total = len(stocks); ss.target = total; t0 = time.time(); ss.start_time = t0
+    logger.info("Run started: total=%d, workers=%d, target_url=%s, skip_recent=%s, skipped=%d",
+                total, num_workers, target_url, skip_recent, skipped_count)
     if skipped_count:
         status_ph.markdown(f'<div class="sbox">Smart-skip: {skipped_count:,} stock(s) skipped (already scraped in last 24h). Processing {total:,}.</div>', unsafe_allow_html=True)
 
@@ -1290,7 +1344,8 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
         try:
             xb,_,_,_ = build_excel(snap, priority_targets, blacklisted_companies)
             if xb: ss.autosave_bytes=xb; ss.autosave_name=f"AutoSave_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
-        except: pass
+        except Exception:
+            logger.exception("Autosave excel build failed")
 
     def worker(wid, chunk, si):
         drv=None; restarts=0; consecutive_errors=0
@@ -1298,8 +1353,10 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
             nonlocal drv
             try:
                 if drv: drv.quit()
-            except: pass
+            except Exception:
+                logger.debug("Worker %d: best-effort quit of prior driver failed", wid, exc_info=True)
             with lock: log_entries.append({"bot":wid,"stock":"","status":"start","num":"BOOT"})
+            logger.info("Worker %d: booting driver", wid)
             d=make_driver(); w=WebDriverWait(d,15)
             for att in range(3):
                 try:
@@ -1314,6 +1371,7 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
             return d,w
         try: drv,wt=boot()
         except Exception:
+            logger.exception("Worker %d: initial driver boot failed; chunk of %d marked failed", wid, len(chunk))
             with lock: ctr["done"]+=len(chunk); ctr["errors"]+=len(chunk); failed.extend(chunk)
             return
         try:
@@ -1327,8 +1385,11 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                     time.sleep(consecutive_errors * 2)  # Adaptive cooldown
                     if consecutive_errors >= 6:
                         # Too many errors - restart browser (new IP/session)
+                        logger.info("Worker %d: %d consecutive errors, rebooting driver", wid, consecutive_errors)
                         try: drv,wt=boot()
-                        except: break
+                        except Exception:
+                            logger.exception("Worker %d: cooldown reboot failed; exiting", wid)
+                            break
                         consecutive_errors = 0
 
                 with lock: log_entries.append({"bot":wid,"stock":stk,"status":"start","num":rn})
@@ -1346,24 +1407,33 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                         consecutive_errors += 1
                         with lock: log_entries.append({"bot":wid,"stock":stk,"status":"dead","num":rn}); failed.append(stk)
                         restarts+=1
-                        if restarts>10: break
+                        logger.warning("Worker %d: dead driver on stock %s (restart #%d)", wid, stk, restarts)
+                        if restarts>10:
+                            logger.error("Worker %d: exceeded restart budget (%d); exiting", wid, restarts)
+                            break
                         time.sleep(2 + restarts)  # Longer wait each restart
                         try: drv,wt=boot()
-                        except: break
+                        except Exception:
+                            logger.exception("Worker %d: post-dead reboot failed; exiting", wid)
+                            break
                     elif status=="err":
                         consecutive_errors += 1
                         with lock:
                             if res: results.append(res)
                             ctr["done"]+=1; ctr["errors"]+=1; failed.append(stk)
                             log_entries.append({"bot":wid,"stock":stk,"status":"err","num":rn})
-                except:
+                except Exception:
+                    logger.exception("Worker %d: unexpected error scraping stock %s", wid, stk)
                     consecutive_errors += 1
                     with lock: ctr["done"]+=1; ctr["errors"]+=1; failed.append(stk)
                     log_entries.append({"bot":wid,"stock":stk,"status":"err","num":rn})
-        except: pass
+        except Exception:
+            logger.exception("Worker %d: chunk loop terminated by exception", wid)
         finally:
             try: drv.quit()
-            except: pass
+            except Exception:
+                logger.debug("Worker %d: best-effort final quit failed", wid, exc_info=True)
+            logger.info("Worker %d: finished", wid)
 
     cs=max(1,total//num_workers); chunks=[]; sis=[]
     for i in range(num_workers):
@@ -1405,7 +1475,8 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                 ss.processed=d; bar_ph.progress(min(d/total,1.0) if total else 0)
         for f in as_completed(futs):
             try: f.result(timeout=5)
-            except: pass
+            except Exception:
+                logger.debug("Worker future raised on join", exc_info=True)
     except BaseException: stop_flag.set(); raise
 
     # Auto-retry
@@ -1413,6 +1484,7 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
     with lock: retry_s=list(set(failed))
     recovered_in_retry = set()
     if retry_s and not was_stopped and len(retry_s)<=total*0.5:
+        logger.info("Retry pass starting for %d failed stock(s)", len(retry_s))
         status_ph.markdown(f'<div class="sbox">Retrying <b>{len(retry_s)}</b> failed...</div>',unsafe_allow_html=True)
         try:
             rd2=make_driver(); rw2=WebDriverWait(rd2,15); rd2.get(target_url); time.sleep(3)
@@ -1427,9 +1499,12 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                             results.append(res); ctr["blacklisted"]+=bl
                             if row_has_priority(res,priority_targets): ctr["priority"]+=1
                             ctr["errors"]=max(0,ctr["errors"]-1)
-                except: pass
+                except Exception:
+                    logger.exception("Retry pass: failed to scrape %s", stk)
             rd2.quit()
-        except: pass
+            logger.info("Retry pass complete: recovered %d/%d", len(recovered_in_retry), len(retry_s))
+        except Exception:
+            logger.exception("Retry pass: driver setup or teardown failed")
 
     # Finalize
     with lock: final=list(results); d,p,bl,e=ctr["done"],ctr["priority"],ctr["blacklisted"],ctr["errors"]; ls=list(log_entries)
@@ -1444,7 +1519,9 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
             lbl="Partial" if was_stopped else "Result"
             ss.output_bytes=xb; ss.output_name=f"{base}_{lbl}_{ts3}.xlsx"
             ss.processed=tr; ss.priority_matches=pc; ss.blacklisted=bl+ex; ss.errors=e
-        except: ss.processed=d; ss.priority_matches=p; ss.blacklisted=bl; ss.errors=e
+        except Exception:
+            logger.exception("Finalize: build_excel failed; falling back to live counters")
+            ss.processed=d; ss.priority_matches=p; ss.blacklisted=bl; ss.errors=e
     else: ss.processed=d; ss.priority_matches=p; ss.blacklisted=bl; ss.errors=e
     ss.final_log=list(ls); ss.running=False; ss.completed=True; ss.stopped=was_stopped
     pool.shutdown(wait=False)
@@ -1457,7 +1534,11 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
         rid=f"run_{datetime.now():%Y%m%d_%H%M%S}"
         sn=ss.get("custom_name","3LINES_Results").strip() or "3LINES_Results"
         db_save_run(rid,sn,total,ss.processed,ss.priority_matches,ss.blacklisted,ss.errors,ed,was_stopped,final)
-    except: pass
+    except Exception:
+        logger.exception("DB save_run failed; results stay in session only")
+    logger.info("Run finished: processed=%d, priority=%d, blacklisted=%d, errors=%d, failed=%d, elapsed=%s, stopped=%s",
+                ss.processed, ss.priority_matches, ss.blacklisted, ss.errors,
+                len(final_failed), ed, was_stopped)
     bar_ph.progress(min(d/total,1.0) if total else 0)
     ts4=d*MINUTES_PER_ITEM_MANUAL
     m1.markdown(rmetric("Records",f"{ss.processed:,}/{total:,}","g"),unsafe_allow_html=True)
