@@ -17,8 +17,10 @@ BLACKLIST = ["MILITARY", "FEDERAL", "FINLAND", "A486G"]  # Exclude these compani
 PREFERRED_VENDOR = "AMETEK"  # Always first priority
 INPUT_FILE = os.path.join(os.path.expanduser("~"), "Desktop", "Abdullah", "input.xlsx")
 OUTPUT_FOLDER = os.path.join(os.path.expanduser("~"), "Desktop", "Abdullah")
-# Use a session URL - user needs to provide a valid session URL or the script uses this default
-BASE_URL = "https://www.lqlite.com/Lq_FLIS.aspx?B=JTEyVFAwJTIyWiUyNDFTJTBEfiU3QyUwQWMlMTJVWlglMEQlMDR3cyUwRHVzJTA3JTAwJTBDJTA4cCUwOSUwNyZTRT00MDFEQzhFQjYwODBDMDQ0Ng=="
+# LEGACY POC FILE — DO NOT REUSE IN PRODUCTION.
+# A live session token was previously hard-coded here; it has been removed.
+# This script is kept for reference only; configure URLs via env vars instead.
+BASE_URL = ""  # placeholder; this legacy script will not run without a configured URL
 
 # Color definitions - Professional colors
 GREEN_FILL = PatternFill(start_color="92D050", end_color="92D050", fill_type="solid")   # AMETEK (Priority 1) - Bright green

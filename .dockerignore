@@ -1,8 +1,9 @@
-# Excel files
+# Excel files (data, never source)
 *.xlsx
 *.xls
+~$*
 
-# Database files
+# Local SQLite database
 *.db
 *.db-shm
 *.db-wal
@@ -11,19 +12,32 @@
 .vscode/
 .idea/
 
-# Python cache
+# Python cache / virtualenvs
 __pycache__/
 *.pyc
 *.pyo
+.venv/
+venv/
 
 # Git
 .git/
 .gitignore
 
-# Other
-*.bat
+# Environment / secrets — never bake into the image
+.env
+.env.*
+
+# Auto-downloaded Chrome for Testing (host artifact)
+.chrome-for-testing/
+
+# Logs
+logs/
+*.log
+
+# Archived POC scripts — not shipped in the production image
+legacy/
+
+# Docs / repo metadata not needed in the image
 *.md
 nul
-client/
-server/
-~$*
+*.bat

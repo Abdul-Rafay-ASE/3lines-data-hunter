@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Local SQLite database (runtime artifact)
+*.db
+*.db-shm
+*.db-wal
+
+# Excel artifacts (treat as data, not source)
+*.xlsx
+*.xls
+~$*
+
+# Auto-downloaded Chrome for Testing
+.chrome-for-testing/
+
+# Logs
+logs/
+*.log

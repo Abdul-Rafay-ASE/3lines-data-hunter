@@ -1,6 +1,7 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # ── Install Chromium + dependencies ──
+# curl is needed for the HEALTHCHECK below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     chromium-driver \
@@ -11,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libatk-bridge2.0-0 \
     libgtk-3-0 \
     libgbm1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Set Chrome env vars ──
@@ -28,9 +30,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Copy app files ──
+# Legacy POC scripts (legacy/) are intentionally NOT copied into the image.
 COPY app.py .
-COPY scraper.py .
-COPY transformer.py .
 COPY logo.png .
 
 EXPOSE 8501
