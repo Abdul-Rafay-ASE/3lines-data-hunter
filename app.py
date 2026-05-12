@@ -1807,7 +1807,13 @@ with tab_scraper:
             _unfinished = []
         for _ur in _unfinished:
             _ur_id = _ur["run_id"]
-            _processed = _ur.get("processed", 0) or 0
+            # runs.processed is only written on finalize, so it stays 0 for an
+            # interrupted run. Read the live count from run_progress instead.
+            try:
+                _processed = len(db_get_run_progress_stocks(_ur_id))
+            except Exception:
+                logger.exception("Failed to count run_progress rows for %s", _ur_id)
+                _processed = _ur.get("processed", 0) or 0
             _total = _ur.get("total_stocks", 0) or 0
             _name = _ur.get("save_name") or "(untitled)"
             _when = (_ur.get("created_at") or "")[:16].replace("T", " ")
