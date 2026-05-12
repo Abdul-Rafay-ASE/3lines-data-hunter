@@ -13,6 +13,7 @@ import pandas as pd
 import re
 import io
 import os
+import sys
 import time
 import json
 import base64
@@ -1163,7 +1164,10 @@ def make_driver():
                  "--disable-default-apps", "--disable-sync", "--disable-translate",
                  "--metrics-recording-only", "--no-first-run"]:
         opts.add_argument(flag)
-    if os.name != "nt":
+    # --single-process / --no-zygote / --disable-setuid-sandbox are Linux-only.
+    # On macOS they crash the renderer on launch ("invalid session id: session
+    # deleted as the browser has closed the connection"). Gate strictly on Linux.
+    if sys.platform.startswith("linux"):
         opts.add_argument("--single-process")
         opts.add_argument("--no-zygote")
         opts.add_argument("--disable-setuid-sandbox")
