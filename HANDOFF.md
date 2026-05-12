@@ -118,23 +118,65 @@ All in `app.py`:
 
 ## C. Current state
 
-- `app.py` is still the primary Streamlit app (~1900+ lines).
-- All four phase commits are pushed to `origin/master`.
-- The app is ready to be run locally for smoke testing.
+- `app.py` is still the primary Streamlit app (~2,190 lines after the
+  2026-05-12 fixes).
+- The four phase commits **plus** three follow-up fixes are pushed to
+  `origin/master`.
+- The app has been validated end-to-end on macOS Apple Silicon and inside
+  the Docker image. **Production-ready for local internal use.**
 
-**NOT VERIFIED YET:**
+### Validation pass — 2026-05-12 (new Mac)
 
-- Docker build (daemon wasn't running on the previous Mac).
-- Live browser UI (the previous Claude never opened the app in a browser
-  even once).
-- Real `lqlite.com` scraping after the changes.
-- Concurrent worker writes to `run_progress` under realistic load (only
-  single-threaded smoke-tested in isolation).
-- Resume UX end-to-end (only the SQL helpers were smoke-tested against a
-  temp SQLite).
+End-to-end smoke test completed against real lqlite.com NSNs. All of these
+now work:
 
-**PRODUCTION READINESS:** not confirmed. The code parses, the helpers work
-in isolation, but no end-to-end run has happened.
+- Streamlit launch on macOS (no traceback at startup).
+- 4 tabs render: Scraper / Dashboard / Database / Settings.
+- 7-stock scrape on Slower(1) preset — populated MFG/P.NO fields, 0 errors.
+- Excel / CSV / JSON downloads open cleanly with correct data.
+- `logs/datahunter.log` written with lifecycle INFO lines (run start/finish,
+  worker boot/finish, smart-skip early return, Resume, Discard).
+- Smart-skip checkbox filters all recently-scraped stocks (24h window),
+  short-circuits with 0s elapsed.
+- Resume + Discard flow: kill mid-run, wait >5 min, banner appears with
+  correct live count from `run_progress`, Resume reuses same `run_id` and
+  skips already-`ok` stocks, Discard fully removes the run from all three
+  DB tables.
+- `DH_MAX_BOTS=3` correctly collapses speed presets to 1 / 3 / 3 / 3.
+- Docker image builds (~1.86 GB on disk, 467 MB compressed) and scrapes
+  successfully inside the container.
+
+### Three fixes added on top of phase commits
+
+- **`d0ba1f3`** — Fix `--single-process` crashing Chrome renderer on macOS.
+  Pre-existing bug. `make_driver()` gated Linux-only Chrome flags on
+  `os.name != "nt"`, which is True on both Linux and macOS. macOS crashed
+  every Selenium session at start with "invalid session id: ... browser has
+  closed the connection". Switched the guard to
+  `sys.platform.startswith("linux")`. **Blocking fix — without it the app
+  cannot run on macOS at all.**
+- **`c7e7ee8`** — Preserve smart-skip success message across Streamlit
+  rerun. The success banner was set on a placeholder then immediately wiped
+  by `st.rerun()`, leaving a misleading red "No results found" error as the
+  only visible feedback. Added `ss.smart_skipped` flag and branched the
+  completion screen on it.
+- **`5149e57`** — Show live `run_progress` count in unfinished-run banner.
+  The banner read from `runs.processed` (only set on finalize), so crashed
+  runs always displayed "0/N stocks recorded" even when several stocks were
+  already saved. Banner now reads the live count from `run_progress`; the
+  resume logic itself was already correct.
+
+### Still NOT validated
+
+- **Failed-stocks export button** (the `<save_name>_FAILED.xlsx` download).
+  The retry pass + failed-stocks path is unexercised because no real
+  failures occurred during smoke testing. Empty-result NSNs (gibberish) are
+  correctly classified as `ok`, not `err`/`dead`. To force a real failure,
+  drop `DH_PER_STOCK_TIMEOUT` to 8 (real NSNs take 10-17s) or point the
+  target URL at an unreachable host.
+- Concurrent-worker writes to `run_progress` under realistic load — only
+  validated with 1 worker. Should test with 3 workers on a larger batch
+  before assuming WAL handles the contention.
 
 ---
 
