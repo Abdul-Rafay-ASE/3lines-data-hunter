@@ -457,6 +457,7 @@ defaults = dict(
     stock_count=0, file_bytes=None, final_log=[],
     perf_data=[], failed_stocks=[], final_data=[], auto_downloaded=False,
     resume_run_id="",  # set when user clicks Resume on the unfinished-run banner
+    smart_skipped=False,  # True when run_scraper early-returns because all stocks were recently scraped
 )
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -1430,7 +1431,7 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
     ss.running=True; ss.completed=False; ss.stopped=False
     ss.processed=0; ss.priority_matches=0; ss.blacklisted=0; ss.errors=0
     ss.output_bytes=None; ss.output_name=""; ss.autosave_bytes=None; ss.autosave_name=""
-    ss.perf_data=[]; ss.failed_stocks=[]; ss.final_data=[]; stop_flag.clear()
+    ss.perf_data=[]; ss.failed_stocks=[]; ss.final_data=[]; ss.smart_skipped=False; stop_flag.clear()
 
     stocks, err_msg = load_stocks_strict(file_bytes)
     if not stocks:
@@ -1451,6 +1452,7 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
         if not stocks:
             logger.info("Smart-skip: all stocks were scraped recently; nothing to do")
             status_ph.markdown('<div class="sbox">All stocks were scraped recently \u2014 nothing to do. Disable smart-skip to re-run them.</div>', unsafe_allow_html=True)
+            ss.smart_skipped=True
             ss.running=False; ss.completed=True; ss.stopped=False; return
 
     if 0 < limit < len(stocks): stocks = stocks[:limit]
@@ -2060,6 +2062,8 @@ with tab_scraper:
                         use_container_width=True,
                         help="Stocks that did not produce a result, even after the auto-retry pass. Re-feed this file into the Scraper tab to try again.",
                     )
+        elif ss.smart_skipped:
+            st.info("All stocks were scraped recently — nothing to do. Disable smart-skip to re-run them.")
         else:
             st.error(f"No results found. Errors: {ss.errors:,} | Time: {int(elapsed)}s")
         if st.button("Run Again",use_container_width=True, type="primary"):
