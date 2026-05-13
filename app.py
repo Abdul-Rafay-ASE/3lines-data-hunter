@@ -37,6 +37,10 @@ from config import (
     DEFAULT_URL, AUTOSAVE_INTERVAL,
     STATIC_BLACKLIST, MINUTES_PER_ITEM_MANUAL, MAX_LOG_LINES,
 )
+from utils.parsing import (
+    load_stocks_strict, parse_comma_list, matches_company_list,
+    row_has_priority, row_is_blacklisted,
+)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1006,43 +1010,6 @@ PRIORITY_FILL = PatternFill(start_color="00FF00", end_color="00FF00", fill_type=
 W_FILL = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
 BDR = Border(left=Side(style='thin'), right=Side(style='thin'),
              top=Side(style='thin'), bottom=Side(style='thin'))
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  HELPERS
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def load_stocks_strict(fb):
-    xl = pd.ExcelFile(io.BytesIO(fb))
-    df = pd.read_excel(io.BytesIO(fb), sheet_name=xl.sheet_names[0], dtype=str, header=0)
-    if df.empty or len(df.columns) == 0:
-        return [], "\u274c File Rejected: Stock numbers must start from Row 2 in Column A"
-    col_a = df.iloc[:, 0]
-    if len(col_a) == 0 or pd.isna(col_a.iloc[0]) or str(col_a.iloc[0]).strip() == "":
-        return [], "\u274c File Rejected: Stock numbers must start from Row 2 in Column A"
-    stocks = [str(v).strip().replace("-", "").replace(" ", "")
-              for v in col_a if pd.notna(v) and str(v).strip()]
-    if not stocks:
-        return [], "\u274c File Rejected: Stock numbers must start from Row 2 in Column A"
-    return stocks, ""
-
-def parse_comma_list(text):
-    if not text or not text.strip(): return []
-    return [t.strip().upper() for t in text.split(",") if t.strip()]
-
-def matches_company_list(mfg_name, company_list):
-    if not mfg_name or not company_list: return False
-    mu = mfg_name.strip().upper()
-    return any(t in mu for t in company_list)
-
-def row_has_priority(row_dict, priority_list):
-    if not priority_list: return False
-    return any(matches_company_list(str(v), priority_list)
-               for k, v in row_dict.items() if k.startswith("MFG ") and v)
-
-def row_is_blacklisted(row_dict, blacklist):
-    if not blacklist: return False
-    return any(matches_company_list(str(v), blacklist)
-               for k, v in row_dict.items() if k.startswith("MFG ") and v and str(v).strip())
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
