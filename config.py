@@ -1,5 +1,10 @@
 """Environment-driven configuration for 3LINES DataHunter.
 
+Also exposes APP_DIR (absolute path of the repo root) so submodules in
+utils/ database/ scraper/ exports/ ui/ can anchor file paths (logs/,
+datahunter_local.db, .chrome-for-testing/) relative to it instead of
+relying on __file__ which would resolve to the submodule itself.
+
 Reads .env (via python-dotenv when available) and exposes:
 
     DH_DEFAULT_URL          → target URL pre-filled in the Scraper tab
@@ -16,6 +21,9 @@ Reads .env (via python-dotenv when available) and exposes:
 All env-derived values fall back to safe defaults when unset or invalid.
 """
 import os
+
+# Repo root — absolute path of the directory containing this file.
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Best-effort load of a local .env so DH_PASSWORD (and other DH_* vars) are
 # picked up during local development. Production deployments typically inject
