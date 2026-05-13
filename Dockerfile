@@ -31,8 +31,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Copy app files ──
 # Legacy POC scripts (legacy/) are intentionally NOT copied into the image.
-COPY app.py .
-COPY logo.png .
+COPY app.py logo.png config.py ./
+COPY utils/    ./utils/
+COPY database/ ./database/
+COPY exports/  ./exports/
+COPY scraper/  ./scraper/
+COPY ui/       ./ui/
 
 EXPOSE 8501
 
