@@ -40,6 +40,10 @@ from utils.parsing import (
     row_has_priority, row_is_blacklisted,
 )
 from utils.logger import logger
+from utils.system import (
+    PSUTIL_OK, get_system_status,
+    AVAILABLE_GB, TOTAL_GB, CPU_LOAD, CPU_CORES, SMART_LIMIT,
+)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -315,42 +319,6 @@ def db_get_recently_scraped_stocks(within_hours=24):
     conn.close()
     return {str(r["stock_number"]).replace("-", "").strip() for r in rows if r["stock_number"]}
 
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  SYSTEM RESOURCES
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PSUTIL_OK = False
-try:
-    import psutil
-    PSUTIL_OK = True
-except ImportError:
-    pass
-
-
-def get_system_status():
-    if PSUTIL_OK:
-        mem = psutil.virtual_memory()
-        available_gb = round(mem.available / (1024 ** 3), 1)
-        total_gb = round(mem.total / (1024 ** 3), 1)
-        cpu_load = psutil.cpu_percent(interval=1)
-        cpu_cores = psutil.cpu_count(logical=True) or os.cpu_count() or 2
-    else:
-        available_gb, total_gb, cpu_load = 4.0, 4.0, 0.0
-        cpu_cores = os.cpu_count() or 2
-    safe_bots = max(1, min(int(available_gb / 0.6), 5))
-    if cpu_load > 70:
-        safe_bots = max(1, safe_bots // 2)
-    safe_bots = min(safe_bots, 5)  # Hard cap at 5 for stability
-    return {"available_gb": available_gb, "total_gb": total_gb,
-            "cpu_load": cpu_load, "cpu_cores": cpu_cores, "safe_bots": safe_bots}
-
-
-_SYS = get_system_status()
-AVAILABLE_GB = _SYS["available_gb"]
-TOTAL_GB = _SYS["total_gb"]
-CPU_LOAD = _SYS["cpu_load"]
-CPU_CORES = _SYS["cpu_cores"]
-SMART_LIMIT = _SYS["safe_bots"]
 
 try:
     from selenium import webdriver
