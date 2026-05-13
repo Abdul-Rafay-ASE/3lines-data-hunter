@@ -1180,7 +1180,13 @@ def make_driver():
         drv = webdriver.Chrome(service=Service(_CHROME_DRV), options=opts)
     else:
         drv = webdriver.Chrome(options=opts)
-    drv.set_page_load_timeout(45)
+    # Derive page-load timeout from DH_PER_STOCK_TIMEOUT so Selenium raises a
+    # clean TimeoutException before the scrape_one_with_timeout wall-clock
+    # wrapper would abandon the worker thread. 15 s buffer below the wall-
+    # clock; floor of 5 s so very tight DH_PER_STOCK_TIMEOUT values still
+    # leave the browser a moment to navigate. Default DH_PER_STOCK_TIMEOUT=60
+    # → page-load timeout = 45 s (unchanged from previous hardcoded value).
+    drv.set_page_load_timeout(max(5, DH_PER_STOCK_TIMEOUT - 15))
     drv.set_script_timeout(20)
     drv.implicitly_wait(8)
     return drv
