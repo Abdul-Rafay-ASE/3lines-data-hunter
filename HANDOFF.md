@@ -300,10 +300,17 @@ If all smoke tests pass:
   timeout, so threads can be torn down abruptly. Tightening it gives a clean
   `dead` exit. Small isolated change.
 
-- **P3d — Replace remaining `time.sleep(...)` calls in `scrape_one` with
-  `WebDriverWait` polls.** This is the per-bot efficiency win that matches
-  the scraping-ethics memory: optimize per-bot rather than scaling by adding
-  bots.
+- ~~**P3d — Replace remaining `time.sleep(...)` calls in `scrape_one` with
+  `WebDriverWait` polls.**~~ **Shipped 2026-05-13 as `e91a528`.** Rewrote
+  `_smart_wait` with `WebDriverWait(..., poll_frequency=0.2)` and removed
+  three cargo-cult sleeps inside `scrape_one`. Validated against the same
+  7-NSN file — 7/7 still `ok`, data still populated, wall-clock went from
+  1m 07s to 1m 05s (only -3 %). **The dominant cost is now confirmed to be
+  lqlite.com's server-side render time (9-15 s per real NSN), not local
+  polling overhead.** Further per-bot client-side optimization will have
+  diminishing returns; if more speed is needed, the answer is either
+  parallel workers (with care for scraping ethics) or asking lqlite.com to
+  expose a faster API.
 
 - **Phase 4 — Modular refactor of `app.py`** (~1900 lines) into:
 
