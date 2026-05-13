@@ -1190,17 +1190,18 @@ def make_driver():
 #  SCRAPER
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def _smart_wait(drv, target_text="tr", timeout=8):
-    """Wait until page has content or timeout - smarter than fixed sleep."""
-    end = time.time() + timeout
-    while time.time() < end:
-        try:
-            els = drv.find_elements(By.TAG_NAME, target_text)
-            if len(els) > 3:
-                return True
-        except Exception:
-            pass
-        time.sleep(0.5)
-    return False
+    """Wait until the page has >3 elements of the given tag, or until
+    `timeout` seconds elapse. Uses Selenium's WebDriverWait so the call
+    returns the moment the condition is met, instead of rounding up to
+    the next manual poll tick. poll_frequency=0.2 keeps the wait tight
+    enough to match (and beat) the previous 0.5 s polling loop."""
+    try:
+        WebDriverWait(drv, timeout, poll_frequency=0.2).until(
+            lambda d: len(d.find_elements(By.TAG_NAME, target_text)) > 3
+        )
+        return True
+    except Exception:
+        return False
 
 
 def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_companies):
@@ -1214,7 +1215,6 @@ def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_compani
             except Exception:
                 drv.get(target_url)
                 _smart_wait(drv, "input", 6)
-                time.sleep(1)
                 try:
                     box = wt.until(EC.presence_of_element_located((By.ID, "nALL")))
                     break
@@ -1222,9 +1222,9 @@ def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_compani
                     if attempt == 1:
                         return {"Stock Number": s, "P.NO 1": "", "MFG 1": ""}, "err", 0
 
-        # Smart: clear and type with verification
-        box.clear(); time.sleep(0.2)
-        box.send_keys(s); time.sleep(0.15)
+        # Selenium's clear() and send_keys() are synchronous; no settle delay needed.
+        box.clear()
+        box.send_keys(s)
         box.send_keys(Keys.RETURN)
 
         # Smart: wait for results instead of fixed sleep
