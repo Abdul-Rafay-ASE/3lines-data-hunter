@@ -314,46 +314,47 @@ If all smoke tests pass:
   parallel workers (with care for scraping ethics) or asking lqlite.com to
   expose a faster API.
 
-- **Phase 4 — Modular refactor of `app.py`.** Started 2026-05-13. Nine
-  low/medium-risk extractions shipped this session as separate commits:
+- ~~**Phase 4 — Modular refactor of `app.py`.**~~ **Complete, shipped
+  2026-05-13.** Thirteen commits, each individually revertible. The
+  monolithic `app.py` is now a 146-line orchestrator that wires up
+  the rest of the codebase.
 
-  | Commit    | Module              | Lines moved |
-  |-----------|---------------------|-------------|
-  | `e8d0f80` | `config.py`          | 51          |
-  | `beaab67` | `utils/parsing.py`   | 63          |
-  | `7b1e88d` | `utils/logger.py`    | 57          |
-  | `7ac8e07` | `utils/system.py`    | 46          |
-  | `8de9577` | `database/db.py`     | 295         |
-  | `7ea3b9e` | `exports/builders.py`| 117         |
-  | `1bf724e` | `scraper/driver.py`  | 164         |
-  | `6b0acec` | `scraper/scrape.py`  | 202         |
-  | `06903cd` | `ui/components.py`   | 37          |
+  | Commit    | Module / Change                | Lines moved |
+  |-----------|--------------------------------|-------------|
+  | `e8d0f80` | `config.py`                     | 51          |
+  | `beaab67` | `utils/parsing.py`              | 63          |
+  | `7b1e88d` | `utils/logger.py`               | 57          |
+  | `7ac8e07` | `utils/system.py`               | 46          |
+  | `8de9577` | `database/db.py`                | 295         |
+  | `7ea3b9e` | `exports/builders.py`           | 117         |
+  | `1bf724e` | `scraper/driver.py`             | 164         |
+  | `6b0acec` | `scraper/scrape.py`             | 202         |
+  | `06903cd` | `ui/components.py`              | 37          |
+  | `46388e3` | `ui/theme.py` (CSS + palette)   | 520         |
+  | `868afac` | `scraper/orchestrator.py`       | 337         |
+  | `7dff18d` | `ui/tabs/{scraper,dashboard,database,settings}.py` | 442 |
+  | `614ef9f` | `Dockerfile` (COPY new modules) | n/a         |
 
-  `app.py`: **2,198 → 1,445 lines (-753, -34 %)** with **zero behavioural
-  regressions** — the same 7-NSN file produces identical populated MFG/
-  P.NO entries (NIMIKKEISTOKESKUS / REID PRODUCTS / TWIST TITE / HOWMET /
-  ALLFAST / JEDNOLITY / MILITARY SPECIFICATIONS etc.) at ~1m 13s elapsed.
+  `app.py`: **2,198 → 146 lines (-2,052, -93 %)** with **zero
+  behavioural regressions** at any step. Each commit was validated by
+  page-render check; steps 11 (orchestrator), 12 (tabs), and 13 (Docker)
+  additionally ran a full 7-NSN scrape end-to-end. The same NSNs that
+  produced rich MFG/P.NO chains (NIMIKKEISTOKESKUS / REID PRODUCTS /
+  TWIST TITE / HOWMET / ALLFAST / JEDNOLITY / MILITARY SPECIFICATIONS)
+  before the refactor continue to produce identical data after.
 
-  Each step was committed individually so any single extraction is
-  cleanly revertible. `config.py` introduced `APP_DIR` as the anchor
-  for relative paths (`logs/`, `datahunter_local.db`) since the
-  submodules no longer have `app.py` in their `__file__`.
-
-  **Still pending (high-risk, deferred to next session):**
-
-  - `ui/theme.py` — the 537-line CSS f-string. Heavy cross-references
-    to ~30 module-level color vars; extracting without regressing the
-    UI is the trickiest part of Phase 4.
-  - `scraper/orchestrator.py` — extract `run_scraper` (~327 lines).
-    Tight coupling to `st.session_state`; needs careful handling of
-    Selenium imports the orchestrator still uses (`WebDriverWait`, `By`).
-  - `ui/tabs/{scraper,dashboard,database,settings}.py` — split the
-    four tabs (~441 lines combined) into separate modules.
-  - **Dockerfile update.** The current `COPY app.py .` line in the
-    Dockerfile only copies the entrypoint. The new modules
-    (`config.py`, `utils/`, `database/`, `exports/`, `scraper/`,
-    `ui/`) must be added so the Docker build still works. The local
-    dev environment is unaffected; only the Docker image needs this
-    follow-up.
+  Key design choices:
+  - `config.py` introduced `APP_DIR` as the anchor for relative paths
+    (`logs/`, `datahunter_local.db`) since submodules no longer have
+    `app.py` in their `__file__`.
+  - `ui/theme.py::apply_theme(is_dark)` owns both the color palette
+    and the CSS injection, returns the colors dict so tab modules can
+    receive it and unpack named colors locally.
+  - `scraper.orchestrator.run_scraper` keeps its tight coupling to
+    `st.session_state` — by design, since it owns live UI updates
+    while running worker threads.
+  - `SELENIUM_OK` in app.py is now derived from whether the orchestrator
+    import succeeds (its transitive selenium deps are the actual hard
+    requirement), not from probing the selenium package directly.
 
 **ABSOLUTE RULE:** do not refactor before validating current behavior.
