@@ -294,11 +294,13 @@ code wastes effort if the verification reveals bugs.
 
 If all smoke tests pass:
 
-- **P3c — Lower the Selenium page-load timeout** closer to
-  `DH_PER_STOCK_TIMEOUT - 15`. The Python wall-clock wrapper already catches
-  hangs at the timeout, but Selenium itself still has a 45 s page-load
-  timeout, so threads can be torn down abruptly. Tightening it gives a clean
-  `dead` exit. Small isolated change.
+- ~~**P3c — Lower the Selenium page-load timeout** closer to
+  `DH_PER_STOCK_TIMEOUT - 15`.~~ **Shipped 2026-05-13 as `c4ce3e7`.**
+  `make_driver()` now calls `set_page_load_timeout(max(5, DH_PER_STOCK_TIMEOUT - 15))`.
+  At the default `DH_PER_STOCK_TIMEOUT=60` the formula evaluates to 45 —
+  byte-identical to the previous hardcoded value, so default behaviour is
+  unchanged. The change only matters when the operator tightens the
+  wall-clock cap (e.g. when forcing the failed-stocks path).
 
 - ~~**P3d — Replace remaining `time.sleep(...)` calls in `scrape_one` with
   `WebDriverWait` polls.**~~ **Shipped 2026-05-13 as `e91a528`.** Rewrote
