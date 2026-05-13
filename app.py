@@ -32,6 +32,12 @@ from concurrent.futures import (
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 
+from config import (
+    DH_DEFAULT_URL, DH_MAX_BOTS, DH_AUTOSAVE_INTERVAL, DH_PER_STOCK_TIMEOUT,
+    DEFAULT_URL, AUTOSAVE_INTERVAL,
+    STATIC_BLACKLIST, MINUTES_PER_ITEM_MANUAL, MAX_LOG_LINES,
+)
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  LOGGING
@@ -409,15 +415,9 @@ st.set_page_config(page_title="3LINES DataHunter", page_icon="3L",
                    layout="wide", initial_sidebar_state="collapsed")
 
 # ── Optional Password Gate ──
-# Best-effort load of a local .env so DH_PASSWORD (and other DH_* vars) are
-# picked up during local development. Production deployments typically inject
-# env vars directly and won't have python-dotenv as a hard requirement.
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
+# .env is loaded by config.py at import time; DH_PASSWORD is read directly
+# from os.environ rather than re-exported because the value is only used
+# right here.
 _DH_PASSWORD = os.environ.get("DH_PASSWORD", "").strip()
 if _DH_PASSWORD:
     if not st.session_state.get("_dh_authenticated"):
@@ -433,19 +433,6 @@ if _DH_PASSWORD:
             else:
                 st.error("Incorrect password.")
         st.stop()
-
-# ── Runtime Configuration (from env vars, with safe defaults) ──
-def _env_int(name, default):
-    try:
-        v = os.environ.get(name, "").strip()
-        return int(v) if v else default
-    except (TypeError, ValueError):
-        return default
-
-DH_DEFAULT_URL       = os.environ.get("DEFAULT_TARGET_URL", "").strip() or "https://www.lqlite.com"
-DH_MAX_BOTS          = max(1, _env_int("DH_MAX_BOTS", 10))
-DH_AUTOSAVE_INTERVAL = max(1, _env_int("DH_AUTOSAVE_INTERVAL", 50))
-DH_PER_STOCK_TIMEOUT = max(10, _env_int("DH_PER_STOCK_TIMEOUT", 60))
 
 # ── Session State ──
 defaults = dict(
@@ -1008,13 +995,10 @@ div[data-testid="stDownloadButton"] button p {{ color: #fff !important; }}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  CONSTANTS & EXCEL STYLES
+#  EXCEL STYLES
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DEFAULT_URL = DH_DEFAULT_URL
-STATIC_BLACKLIST = ["A486G", "FINLAND"]
-AUTOSAVE_INTERVAL = DH_AUTOSAVE_INTERVAL
-MINUTES_PER_ITEM_MANUAL = 2
-MAX_LOG_LINES = 30
+# (Other application constants now live in config.py and are imported
+# at the top of this file.)
 
 H_FILL = PatternFill(start_color="002060", end_color="002060", fill_type="solid")
 H_FONT = Font(bold=True, size=11, color="FFFFFF")
