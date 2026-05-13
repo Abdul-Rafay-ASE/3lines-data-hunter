@@ -3,12 +3,15 @@
 render_log(entries) → string of HTML <div> rows for the Live Processing Log,
                       keyed by event status (start / ok / priority / blocked /
                       err / dead / retry).
-rmetric(label, value, color) → metric tile HTML for the Live Progress row.
+rmetric(label, value, color, help) → metric tile HTML for the Live Progress
+                      row. Optional `help` renders a (?) glyph that shows
+                      the help text as a browser-native tooltip on hover.
 
 Both return strings; the caller is responsible for passing them to
 st.markdown(..., unsafe_allow_html=True). No Streamlit import is needed
 here because nothing renders directly — only HTML is produced.
 """
+from html import escape
 
 
 def render_log(entries):
@@ -32,6 +35,11 @@ def render_log(entries):
     return f'<div class="llog"><div class="lt">Live Processing Log</div>{lines}</div>'
 
 
-def rmetric(label, value, color="g"):
+def rmetric(label, value, color="g", help=None):
     cmap = {"g": "cv-green", "b": "cv-blue", "r": "cv-red", "p": "cv-purple"}
-    return f'<div class="mc {color}"><div class="mv {cmap.get(color, "cv-green")}">{value}</div><div class="ml">{label}</div></div>'
+    help_glyph = (
+        f' <span style="opacity:0.5;font-size:0.75em;cursor:help;margin-left:0.25rem;" '
+        f'title="{escape(str(help), quote=True)}">(?)</span>'
+        if help else ''
+    )
+    return f'<div class="mc {color}"><div class="mv {cmap.get(color, "cv-green")}">{value}</div><div class="ml">{label}{help_glyph}</div></div>'

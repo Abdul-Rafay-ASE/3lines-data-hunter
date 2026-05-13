@@ -22,7 +22,9 @@ def render():
     db1, db2, db3, db4 = st.columns(4)
     db1.markdown(rmetric("Runs", f"{stats['total_runs']}", "b"), unsafe_allow_html=True)
     db2.markdown(rmetric("Records", f"{stats['total_records']:,}", "g"), unsafe_allow_html=True)
-    db3.markdown(rmetric("Priority", f"{stats['total_priority']:,}", "p"), unsafe_allow_html=True)
+    db3.markdown(rmetric("Priority Stocks", f"{stats['total_priority']:,}", "p",
+        help="Stocks where at least one supplier matched your priority list. Counted once per stock."),
+        unsafe_allow_html=True)
     db4.markdown(rmetric("Errors", f"{stats['total_errors']:,}", "r"), unsafe_allow_html=True)
 
     if stats["total_runs"] == 0:

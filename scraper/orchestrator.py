@@ -265,8 +265,12 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
                 eta_s=f"{eh2}h {em2:02d}m" if eh2 else f"{em2}m {es2:02d}s"
             else: eta_s="..."
             m1.markdown(rmetric("Records",f"{d:,}/{total:,}","g"),unsafe_allow_html=True)
-            m2.markdown(rmetric("Priority",f"{p:,}","b"),unsafe_allow_html=True)
-            m3.markdown(rmetric("Blacklisted",f"{bl:,}","r"),unsafe_allow_html=True)
+            m2.markdown(rmetric("Priority Stocks", f"{p:,}", "b",
+                help="Stocks where at least one supplier matched your priority list. Counted once per stock."),
+                unsafe_allow_html=True)
+            m3.markdown(rmetric("Blacklisted Entries", f"{bl:,}", "r",
+                help="Supplier entries excluded by your blacklist or built-in static filters (e.g. FINLAND, A486G). Counted per supplier entry, not per stock."),
+                unsafe_allow_html=True)
             m4.markdown(rmetric("Time Saved",f"{ts2:,}m","p"),unsafe_allow_html=True)
             m5.markdown(rmetric("ETA",eta_s,"b"),unsafe_allow_html=True)
             log_ph.markdown(render_log(ls),unsafe_allow_html=True)
@@ -361,8 +365,12 @@ def run_scraper(file_bytes, num_workers, limit, target_url,
     bar_ph.progress(min(d/total,1.0) if total else 0)
     ts4=d*MINUTES_PER_ITEM_MANUAL
     m1.markdown(rmetric("Records",f"{ss.processed:,}/{total:,}","g"),unsafe_allow_html=True)
-    m2.markdown(rmetric("Priority",f"{ss.priority_matches:,}","b"),unsafe_allow_html=True)
-    m3.markdown(rmetric("Blacklisted",f"{ss.blacklisted:,}","r"),unsafe_allow_html=True)
+    m2.markdown(rmetric("Priority Stocks", f"{ss.priority_matches:,}", "b",
+        help="Stocks where at least one supplier matched your priority list. Counted once per stock."),
+        unsafe_allow_html=True)
+    m3.markdown(rmetric("Blacklisted Entries", f"{ss.blacklisted:,}", "r",
+        help="Supplier entries excluded by your blacklist or built-in static filters (e.g. FINLAND, A486G). Counted per supplier entry, not per stock."),
+        unsafe_allow_html=True)
     m4.markdown(rmetric("Time Saved",f"{ts4:,}m","p"),unsafe_allow_html=True)
     m5.markdown(rmetric("Elapsed",ed,"b"),unsafe_allow_html=True)
     log_ph.markdown(render_log(ls),unsafe_allow_html=True)

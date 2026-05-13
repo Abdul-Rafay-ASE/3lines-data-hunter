@@ -225,8 +225,12 @@ def render(defaults, colors, selenium_ok):
         m1_ph, m2_ph, m3_ph, m4_ph, m5_ph = c1.empty(), c2.empty(), c3.empty(), c4.empty(), c5.empty()
         cd2 = ss.processed; ct2 = ss.target if ss.target > 0 else total_records
         m1_ph.markdown(rmetric("Records", f"{cd2:,}/{ct2:,}", "g"), unsafe_allow_html=True)
-        m2_ph.markdown(rmetric("Priority", f"{ss.priority_matches:,}", "b"), unsafe_allow_html=True)
-        m3_ph.markdown(rmetric("Blacklisted", f"{ss.blacklisted:,}", "r"), unsafe_allow_html=True)
+        m2_ph.markdown(rmetric("Priority Stocks", f"{ss.priority_matches:,}", "b",
+            help="Stocks where at least one supplier matched your priority list. Counted once per stock."),
+            unsafe_allow_html=True)
+        m3_ph.markdown(rmetric("Blacklisted Entries", f"{ss.blacklisted:,}", "r",
+            help="Supplier entries excluded by your blacklist or built-in static filters (e.g. FINLAND, A486G). Counted per supplier entry, not per stock."),
+            unsafe_allow_html=True)
         m4_ph.markdown(rmetric("Time Saved", f"{cd2*MINUTES_PER_ITEM_MANUAL:,}m", "p"), unsafe_allow_html=True)
         m5_ph.markdown(rmetric("ETA", "--", "b"), unsafe_allow_html=True)
 
@@ -271,8 +275,12 @@ def render(defaults, colors, selenium_ok):
             st.markdown('<div class="sec">Final Results</div>', unsafe_allow_html=True)
             r1, r2, r3, r4, r5 = st.columns(5)
             r1.markdown(rmetric("Records", f"{ss.processed:,}/{total:,}", "g"), unsafe_allow_html=True)
-            r2.markdown(rmetric("Priority", f"{ss.priority_matches:,}", "b"), unsafe_allow_html=True)
-            r3.markdown(rmetric("Blacklisted", f"{ss.blacklisted:,}", "r"), unsafe_allow_html=True)
+            r2.markdown(rmetric("Priority Stocks", f"{ss.priority_matches:,}", "b",
+                help="Stocks where at least one supplier matched your priority list. Counted once per stock."),
+                unsafe_allow_html=True)
+            r3.markdown(rmetric("Blacklisted Entries", f"{ss.blacklisted:,}", "r",
+                help="Supplier entries excluded by your blacklist or built-in static filters (e.g. FINLAND, A486G). Counted per supplier entry, not per stock."),
+                unsafe_allow_html=True)
             r4.markdown(rmetric("Time Saved", f"{ts5:,}m", "p"), unsafe_allow_html=True)
             r5.markdown(rmetric("Elapsed", ed2, "b"), unsafe_allow_html=True)
         if ss.final_log:

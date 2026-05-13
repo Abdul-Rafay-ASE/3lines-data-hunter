@@ -12,7 +12,9 @@ def render():
     d1, d2, d3, d4 = st.columns(4)
     d1.markdown(rmetric("Total Runs", f"{stats['total_runs']}", "b"), unsafe_allow_html=True)
     d2.markdown(rmetric("All Records", f"{stats['total_records']:,}", "g"), unsafe_allow_html=True)
-    d3.markdown(rmetric("Priority Found", f"{stats['total_priority']:,}", "p"), unsafe_allow_html=True)
+    d3.markdown(rmetric("Priority Stocks", f"{stats['total_priority']:,}", "p",
+        help="Stocks where at least one supplier matched your priority list. Counted once per stock."),
+        unsafe_allow_html=True)
     d4.markdown(rmetric("Total Errors", f"{stats['total_errors']:,}", "r"), unsafe_allow_html=True)
 
     st.markdown('<div class="sec">Recent Jobs</div>', unsafe_allow_html=True)

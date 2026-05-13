@@ -28,6 +28,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from config import STATIC_BLACKLIST
+from utils.logger import logger
 from utils.parsing import matches_company_list
 
 
@@ -101,6 +102,7 @@ def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_compani
         _smart_wait(drv, "td", 4)
         rows = drv.find_elements(By.TAG_NAME, "tr")
         raw = []
+        static_filtered_count = 0
         for r in rows:
             cells = r.find_elements(By.TAG_NAME, "td")
             if len(cells) < 3:
@@ -110,6 +112,8 @@ def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_compani
             if any(x in fc for x in ["NIIN", "FSC", "NSN", "MOE", "AAC", ":"]):
                 continue
             if any(x in fc for x in STATIC_BLACKLIST):
+                logger.debug("Static blacklist filtered row (stock=%s, first_cell=%r)", s, t[0])
+                static_filtered_count += 1
                 continue
             cage = -1
             for i, tx in enumerate(t):
@@ -171,7 +175,10 @@ def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_compani
         if slot == 1:
             res["P.NO 1"] = ""
             res["MFG 1"] = ""
-        return res, "ok", blacklisted_count
+        # Roll static-blacklist hits into the same counter the UI shows as
+        # "Blacklisted Entries" — they're functionally exclusions too,
+        # they were just silent before.
+        return res, "ok", blacklisted_count + static_filtered_count
     except Exception as e:
         em = str(e).lower()
         if "session" in em or "invalid session" in em:
