@@ -145,6 +145,15 @@ now work:
 - `DH_MAX_BOTS=3` correctly collapses speed presets to 1 / 3 / 3 / 3.
 - Docker image builds (~1.86 GB on disk, 467 MB compressed) and scrapes
   successfully inside the container.
+- **Failed-stocks export path** (2026-05-13). Forced 5/7 timeouts by
+  setting `DH_PER_STOCK_TIMEOUT=8` so real NSNs (which take 10-17 s) all
+  fired the wall-clock cap. `scrape_one_with_timeout` marked each as
+  `dead` and rebooted the driver. The `>50%-failed` guardrail correctly
+  skipped the retry pass (5/7 = 71 %). Completion screen rendered the
+  `Download Failed Stocks (5)` button, the `_FAILED.xlsx` download
+  contained exactly the 5 real NSNs (gibberish entries that returned
+  empty-but-fast were correctly excluded as `ok`). Restored `.env` to
+  `DH_PER_STOCK_TIMEOUT=60` after the test.
 
 ### Three fixes added on top of phase commits
 
@@ -168,15 +177,15 @@ now work:
 
 ### Still NOT validated
 
-- **Failed-stocks export button** (the `<save_name>_FAILED.xlsx` download).
-  The retry pass + failed-stocks path is unexercised because no real
-  failures occurred during smoke testing. Empty-result NSNs (gibberish) are
-  correctly classified as `ok`, not `err`/`dead`. To force a real failure,
-  drop `DH_PER_STOCK_TIMEOUT` to 8 (real NSNs take 10-17s) or point the
-  target URL at an unreachable host.
-- Concurrent-worker writes to `run_progress` under realistic load — only
-  validated with 1 worker. Should test with 3 workers on a larger batch
-  before assuming WAL handles the contention.
+- **Retry pass (`<50 %`-failure path).** Today's failed-stocks test crossed
+  the `>50 %` guardrail, so the retry pass was deliberately skipped. The
+  *successful* retry path — where 1-2 stocks fail, the retry pass runs
+  with a fresh single driver, and some failures get recovered into
+  `recovered_in_retry` — was never exercised. To test it, induce a small
+  number of failures (e.g. 1-2 unreachable URLs in a 10-stock file).
+- **Concurrent-worker writes to `run_progress`** — only validated with 1
+  worker. Should test with 3 workers on a larger batch before assuming
+  WAL handles the contention cleanly.
 
 ---
 
