@@ -175,17 +175,77 @@ now work:
   already saved. Banner now reads the live count from `run_progress`; the
   resume logic itself was already correct.
 
+### Multi-bot empirical findings (2026-05-14)
+
+Test ladder run end-to-end on a 49-NSN file (real production stocks
+mixed with two gibberish padding entries). Same file across all runs
+so timing is comparable.
+
+| Workers | Elapsed   | Speedup vs 1-bot | Per-stock effective | Dead-drivers | Retry recovered |
+|---------|-----------|------------------|---------------------|--------------|-----------------|
+| 1       | 11 m 16 s | 1.0 ×            | 13.8 s              | 1            | 0 / 1           |
+| **3**   | **5 m 38 s** | **2.0 ×**     | **6.9 s**           | 1            | 0 / 1           |
+| 6       | 5 m 54 s  | 1.91 ×           | 7.2 s               | 3            | 2 / 3           |
+
+**Headline:** going from 3 → 6 bots got nothing. Same wall-clock,
+slightly worse per-stock, three times the dead-driver noise. **The wall
+is lqlite.com's tolerance for parallel sessions from one IP**, not
+SQLite contention (zero `database is locked`, zero duplicates across
+every test).
+
+**Recommendation:** lower the cap. The `DH_MAX_BOTS=10` default in
+`.env.example` advertises a "Maximum" preset that doesn't pay off on
+this site. Recommend reducing the documented default to `6` and noting
+in the README that `3` is the empirical sweet spot for lqlite. The
+hardcoded "fast" preset label can stay as "Maximum" since it follows
+whatever cap is configured; the change is just to the documented
+default and the explanation around it.
+
+### Three previously-unvalidated paths now validated (2026-05-14)
+
+- ✅ **Concurrent-worker writes to `run_progress`** at 2, 3, and 6
+  workers. SQLite WAL handles every level cleanly. No locks, no dups.
+- ✅ **Retry pass — success-recovery path** (`recovered_in_retry`).
+  The 6-bot run produced 3 transient dead-drivers, of which 2 were
+  recovered by the single-driver retry pass. First time this branch
+  has ever been exercised end-to-end.
+- ✅ **Retry pass — total-failure path.** `5331006413407` is a
+  terminal NSN (confirmed dead at 1, 3, and 6 bots across all runs;
+  retry pass cannot recover it). Failed-stocks export correctly
+  surfaces it. The intrinsic-failure branch of the retry path is
+  exercised on every run that includes this NSN.
+
+### Two follow-up commits this session
+
+- **`6d0433c`** — Counter clarification. STATIC_BLACKLIST hits now
+  roll into the visible "Blacklisted Entries" counter (previously
+  silent). `rmetric()` gained a `(?)` tooltip glyph. Labels rephrased
+  to make per-stock vs per-entry semantics explicit.
+- **`1288964`** — Reset cached `ss.num_bots` on every render. Bug
+  caught during the 2-bot test: if `DH_MAX_BOTS` shrank between
+  Streamlit sessions, `ss.num_bots` retained the old value until the
+  user clicked a preset, leaking forward as a 3-bot run when the cap
+  was set to 2. Six-line defensive fix in `ui/tabs/scraper.py`.
+
 ### Still NOT validated
 
-- **Retry pass (`<50 %`-failure path).** Today's failed-stocks test crossed
-  the `>50 %` guardrail, so the retry pass was deliberately skipped. The
-  *successful* retry path — where 1-2 stocks fail, the retry pass runs
-  with a fresh single driver, and some failures get recovered into
-  `recovered_in_retry` — was never exercised. To test it, induce a small
-  number of failures (e.g. 1-2 unreachable URLs in a 10-stock file).
-- **Concurrent-worker writes to `run_progress`** — only validated with 1
-  worker. Should test with 3 workers on a larger batch before assuming
-  WAL handles the contention cleanly.
+- **10-bot run.** Skipped after 6-bot confirmed contention saturation.
+  Empirically would almost certainly be slower than 6 with more
+  dead-drivers; not worth the test time.
+- **Very large batches (500+ stocks).** Memory growth over many
+  navigations per Chrome instance is theoretical; no real data yet.
+- **Failed-stocks Excel export under real concurrency-induced failures.**
+  The 6-bot run produced one terminal failed stock that the export
+  should surface. Manual UI check pending.
+
+### One known terminal NSN (catalog-side issue)
+
+- **`5331006413407`** — fails on lqlite.com regardless of bot count
+  (1, 3, or 6) and is not recoverable by the retry pass. The result
+  page presumably never finishes loading; Selenium hits
+  `DH_PER_STOCK_TIMEOUT=60` and aborts. Filed under "known issue,
+  surfaces correctly via failed-stocks export". No fix possible from
+  our side without lqlite-side investigation.
 
 ---
 
