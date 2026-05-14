@@ -21,6 +21,7 @@ the next manual poll tick.
 """
 import re
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeoutError
+from datetime import datetime
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -30,6 +31,75 @@ from selenium.webdriver.support import expected_conditions as EC
 from config import STATIC_BLACKLIST
 from utils.logger import logger
 from utils.parsing import matches_company_list
+
+
+# Management Information table column indices (positional; the header row is
+# verified by text below so this is anchored, not blind):
+#   [0]  MOEC    [4]  SLC    [8]  Unit Price   [12] Action Date
+#   [1]  SOS     [5]  CIIC   [9]  UI           [13] C/H
+#   [2]  AAC     [6]  UPQ    [10] UICF
+#   [3]  RC      [7]  USC    [11] MCD
+_MI_PRICE_COL = 8
+_MI_DATE_COL = 12
+_MI_MIN_CELLS = 13  # need at least up to col 12 (Action Date)
+
+
+def _select_best_price_row(candidates):
+    """Given a list of (price_str, date_str) tuples, return the one with the
+    most recent Action Date. Ties broken by highest numeric price. Returns
+    ("", "") for an empty input. Unparseable dates sort to the oldest.
+    Unparseable prices count as 0.0 for tie-breaking but are still returned
+    as their original string."""
+    if not candidates:
+        return "", ""
+    parsed = []
+    for price_str, date_str in candidates:
+        try:
+            dt = datetime.strptime(date_str, "%b-%d-%Y")
+        except Exception:
+            dt = datetime.min
+        try:
+            num = float(price_str.replace("$", "").replace(",", "").strip())
+        except Exception:
+            num = 0.0
+        parsed.append((dt, num, price_str, date_str))
+    # Most recent date first; among same-date rows, highest price first.
+    parsed.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    _, _, price_str, date_str = parsed[0]
+    return price_str, date_str
+
+
+def _extract_mgmt_info(drv):
+    """Find the Management Information KeyTable (identified by 'Unit Price' in
+    its KeyHead row) and return (unit_price, action_date) strings. Multiple
+    rows are resolved by _select_best_price_row. Returns ("", "") on any
+    failure — never raises into the caller."""
+    try:
+        tables = drv.find_elements(By.CLASS_NAME, "KeyTable")
+    except Exception:
+        logger.debug("Mgmt-info: KeyTable lookup failed", exc_info=True)
+        return "", ""
+    for tbl in tables:
+        try:
+            head = tbl.find_elements(By.CSS_SELECTOR, "tr.KeyHead")
+            if not head or "Unit Price" not in head[0].text:
+                continue
+            # Found the Management Information table. Pull data rows.
+            rows = tbl.find_elements(By.CSS_SELECTOR, "tr.KeyRow")
+            candidates = []
+            for r in rows:
+                cells = r.find_elements(By.TAG_NAME, "td")
+                if len(cells) < _MI_MIN_CELLS:
+                    continue
+                price = cells[_MI_PRICE_COL].text.strip()
+                date = cells[_MI_DATE_COL].text.strip()
+                if price:
+                    candidates.append((price, date))
+            return _select_best_price_row(candidates)
+        except Exception:
+            logger.debug("Mgmt-info: per-table parse failed", exc_info=True)
+            continue
+    return "", ""
 
 
 def _smart_wait(drv, target_text="tr", timeout=8):
@@ -163,6 +233,11 @@ def scrape_one(drv, wt, stock, target_url, priority_targets, blacklisted_compani
             else:
                 other_entries.append((pn, co))
         res = {"Stock Number": fstock}
+        # Unit Price + Action Date come from the Management Information table,
+        # which is a separate KeyTable from the Part Information rows above.
+        # Insertion order here puts them right after Stock Number so they
+        # render in the right column order in Excel/CSV/JSON exports.
+        res["Unit Price"], res["Action Date"] = _extract_mgmt_info(drv)
         slot = 1
         for pn, mfg in priority_entries:
             res[f"P.NO {slot}"] = pn

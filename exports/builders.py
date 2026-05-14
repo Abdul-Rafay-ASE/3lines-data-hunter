@@ -52,7 +52,11 @@ def build_excel(data, priority_targets, blacklisted_companies):
     for r in rows:
         all_keys.update(r.keys())
     mx = max((int(c.split()[-1]) for c in all_keys if c.startswith("P.NO ") or c.startswith("MFG ")), default=1)
-    headers = ["Stock Number"]
+    # Unit Price + Action Date come from the Management Information table.
+    # They sit between Stock Number and the P.NO/MFG chain so operators
+    # see price next to the stock they queried. Old rows without these
+    # keys render as empty cells via dict.get(h, "") in the value loop.
+    headers = ["Stock Number", "Unit Price", "Action Date"]
     for i in range(1, mx + 1):
         headers += [f"P.NO {i}", f"MFG {i}"]
     for ci, h in enumerate(headers, 1):
