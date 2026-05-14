@@ -67,6 +67,18 @@ defaults = dict(
     perf_data=[], failed_stocks=[], final_data=[], auto_downloaded=False,
     resume_run_id="",  # set when user clicks Resume on the unfinished-run banner
     smart_skipped=False,  # True when run_scraper early-returns because all stocks were recently scraped
+    # ── Phase B large-file batching state ──
+    # batch_mode flips True when the user clicks "Split into N batches" on the
+    # large-file notice. The batch plan, current pointer, and the run_ids of
+    # already-completed batches are kept in session state for the duration of
+    # one batch group. Cross-batch resume across browser refreshes is NOT
+    # implemented in Phase B — losing the tab loses the plan.
+    batch_mode=False,
+    batch_plan=[],            # list of dicts: {index, total, stocks, save_name}
+    batch_current=0,          # 0-indexed pointer into batch_plan
+    batch_run_ids=[],         # run_ids of completed batches in this group
+    batch_group_id="",        # shared timestamp suffix identifying the group
+    auto_start_batch=False,   # set True when Next-batch is clicked, triggers the next run_scraper call on rerun
 )
 for k, v in defaults.items():
     if k not in st.session_state:

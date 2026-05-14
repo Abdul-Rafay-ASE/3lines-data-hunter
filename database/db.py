@@ -114,6 +114,57 @@ def db_get_run_results(run_id):
     return result
 
 
+def db_get_results_for_run_ids(run_ids):
+    """Return result_data dicts for all rows in run_results matching any
+    of the given run_ids, ordered by row id within each run. Used to
+    aggregate per-batch results into a combined export at the end of a
+    batch group."""
+    if not run_ids:
+        return []
+    placeholders = ",".join(["?"] * len(run_ids))
+    conn = _get_db()
+    rows = conn.execute(
+        f"SELECT result_data FROM run_results WHERE run_id IN ({placeholders}) ORDER BY id",
+        list(run_ids),
+    ).fetchall()
+    out = [json.loads(r["result_data"]) for r in rows]
+    conn.close()
+    return out
+
+
+def db_get_failed_stocks_for_run_ids(run_ids):
+    """Return stock numbers that ended in dead/err status across the given
+    run_ids. After the retry pass overwrites recovered stocks back to 'ok'
+    in run_progress, only the genuinely-terminal failures remain non-ok,
+    so this query returns the correct final-failed list per batch group."""
+    if not run_ids:
+        return []
+    placeholders = ",".join(["?"] * len(run_ids))
+    conn = _get_db()
+    rows = conn.execute(
+        f"""SELECT DISTINCT stock_number FROM run_progress
+           WHERE run_id IN ({placeholders}) AND status IN ('dead', 'err')
+           ORDER BY stock_number""",
+        list(run_ids),
+    ).fetchall()
+    out = [r["stock_number"] for r in rows]
+    conn.close()
+    return out
+
+
+def db_get_latest_run_id_for_save_name(save_name):
+    """Return run_id of the most-recently-created run with this save_name.
+    Used after a batch finishes to capture the just-completed run_id without
+    changing the orchestrator's API."""
+    conn = _get_db()
+    row = conn.execute(
+        "SELECT run_id FROM runs WHERE save_name=? ORDER BY created_at DESC LIMIT 1",
+        (save_name,),
+    ).fetchone()
+    conn.close()
+    return row["run_id"] if row else None
+
+
 def db_get_total_stats():
     conn = _get_db()
     row = conn.execute("""

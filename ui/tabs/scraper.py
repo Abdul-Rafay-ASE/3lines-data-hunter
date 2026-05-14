@@ -11,23 +11,90 @@ The largest tab by far. Owns:
 - The Run History expander.
 """
 import base64
+import io
 import traceback
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from openpyxl import Workbook
 
 from config import DEFAULT_URL, DH_MAX_BOTS, MINUTES_PER_ITEM_MANUAL
 from database.db import (
     db_discard_run,
+    db_get_failed_stocks_for_run_ids,
+    db_get_latest_run_id_for_save_name,
+    db_get_results_for_run_ids,
     db_get_run_progress_stocks,
     db_get_unfinished_runs,
 )
-from exports.builders import build_csv, build_failed_excel, build_json
+from exports.builders import build_csv, build_excel, build_failed_excel, build_json
 from scraper.orchestrator import run_scraper
 from ui.components import render_log, rmetric
 from utils.logger import logger
 from utils.parsing import load_stocks_strict, parse_comma_list
+
+
+# ──────────────────────────────────────────────────────────
+#  Phase B large-file batching helpers
+# ──────────────────────────────────────────────────────────
+BATCH_SIZE_DEFAULT = 500
+BATCH_THRESHOLD = 1000  # rows above this trigger the batch recommendation
+
+
+def _build_batch_plan(stocks, batch_size, base_name, group_id):
+    """Slice `stocks` into batches of size `batch_size`. Each entry is a dict:
+    {index (1-based), total, stocks (list slice), save_name}. The last batch
+    picks up the remainder."""
+    total = (len(stocks) + batch_size - 1) // batch_size
+    plan = []
+    for i in range(total):
+        start = i * batch_size
+        end = min(start + batch_size, len(stocks))
+        plan.append({
+            "index": i + 1,
+            "total": total,
+            "stocks": stocks[start:end],
+            "save_name": f"{base_name}_batch_{i+1}_of_{total}_{group_id}",
+        })
+    return plan
+
+
+def _make_batch_excel_bytes(stocks):
+    """Build an in-memory .xlsx (Column A, rows 2+) containing the given
+    stocks. Used so run_scraper's existing load_stocks_strict path works
+    unchanged — we just feed it a synthesized file per batch."""
+    wb = Workbook()
+    ws = wb.active
+    ws.cell(row=1, column=1, value="Stock Number")
+    for i, s in enumerate(stocks, 2):
+        ws.cell(row=i, column=1, value=s)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+# Per-run session-state keys that should reset BEFORE each batch starts.
+# Excludes batch_* keys (we want to preserve the batch group plan) and
+# stop_flag (it's a threading.Event reused across batches).
+_PER_RUN_RESET_KEYS = [
+    "running", "completed", "stopped",
+    "output_bytes", "output_name", "autosave_bytes", "autosave_name",
+    "processed", "target", "priority_matches", "blacklisted", "errors",
+    "start_time", "elapsed", "final_log",
+    "perf_data", "failed_stocks", "final_data", "auto_downloaded",
+    "smart_skipped",
+]
+
+
+def _reset_per_run_state(defaults):
+    """Reset only the per-run keys, preserving batch group state."""
+    ss = st.session_state
+    for k in _PER_RUN_RESET_KEYS:
+        if k in defaults:
+            ss[k] = defaults[k]
+    ss.stop_flag.clear()
 from utils.system import SMART_LIMIT
 
 
@@ -161,23 +228,94 @@ def render(defaults, colors, selenium_ok):
         elif total_records == 0 and not ss.running and not ss.completed:
             st.error("File Rejected: Stock numbers must start from Row 2 in Column A")
 
-        # ── Large-file recommendation (Phase A — informational only) ──
-        # No actual batching yet. When the file exceeds 1,000 rows, surface
-        # a soft notice recommending the user split into batches of 500.
-        # The empirical sweet spot from the 499-NSN test is ~1 h 22 m at 3
-        # bots; runs much larger than that compound the risk of mid-run
-        # browser disconnects, accumulated dead-driver budget exhaustion,
-        # and unwieldy single-shot exports.
-        if total_records > 1000 and not ss.running and not ss.completed:
-            _suggested_batches = (total_records + 499) // 500
+        # Defensive: if batch_mode is stale from a previous batch group AND
+        # the freshly uploaded file doesn't match the planned total, reset
+        # the batch group. Prevents the batch UI showing stale plan against
+        # the new file when the user uploads without clicking "Start a new file".
+        if ss.batch_mode and ss.batch_plan and not ss.running and not ss.completed:
+            _plan_total = sum(len(b["stocks"]) for b in ss.batch_plan)
+            if _plan_total != total_records:
+                logger.info(
+                    "Resetting stale batch group: plan total=%d, new file=%d",
+                    _plan_total, total_records,
+                )
+                ss.batch_mode = False
+                ss.batch_plan = []
+                ss.batch_current = 0
+                ss.batch_run_ids = []
+                ss.batch_group_id = ""
+                ss["_batch_notice_dismissed"] = False
+
+        # ── Large-file batch handling (Phase A notice + Phase B controls) ──
+        # When the file exceeds BATCH_THRESHOLD rows, offer the user a
+        # choice between a single run and splitting into batches of
+        # BATCH_SIZE_DEFAULT. The empirical sweet spot at 3 bots is
+        # ~1 h 22 m per 500-row batch.
+        if total_records > BATCH_THRESHOLD and not ss.running and not ss.completed and not ss.batch_mode:
+            _suggested_batches = (total_records + BATCH_SIZE_DEFAULT - 1) // BATCH_SIZE_DEFAULT
             st.info(
                 f"**Large file detected — {total_records:,} rows.** "
-                f"For stability, we recommend processing in **{_suggested_batches} batches of ~500 rows** "
+                f"For stability, we recommend processing in **{_suggested_batches} batches of ~{BATCH_SIZE_DEFAULT} rows** "
                 f"(the empirically-validated sweet spot at 3 bots, ~1 h 22 m per batch). "
                 f"You can still continue with a single run, but expect roughly "
-                f"{total_records // 60} minutes of wall-clock and higher risk of mid-run failures. "
-                f"Batch-split UI is planned for a future release; for now, split the file manually if you want."
+                f"{total_records // 60} minutes of wall-clock and higher risk of mid-run failures."
             )
+            _bdec1, _bdec2, _ = st.columns([1, 1, 2])
+            with _bdec1:
+                if st.button(
+                    f"Split into {_suggested_batches} batches",
+                    key="batch_split_btn", use_container_width=True, type="primary",
+                ):
+                    base_name = (ss.get("custom_name", "") or "3LINES_Results").strip() or "3LINES_Results"
+                    group_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    ss.batch_plan = _build_batch_plan(detected_stocks, BATCH_SIZE_DEFAULT, base_name, group_id)
+                    ss.batch_current = 0
+                    ss.batch_run_ids = []
+                    ss.batch_group_id = group_id
+                    ss.batch_mode = True
+                    logger.info("Batch mode enabled: %d batches of %d, group=%s",
+                                len(ss.batch_plan), BATCH_SIZE_DEFAULT, group_id)
+                    st.rerun()
+            with _bdec2:
+                if st.button("Continue as single run", key="batch_single_btn", use_container_width=True):
+                    # No-op functionally; clear the notice by setting a dismiss flag.
+                    # Simplest path: set batch_mode False explicitly (already False)
+                    # and hide the notice on next render via a session flag.
+                    ss["_batch_notice_dismissed"] = True
+                    st.rerun()
+            if ss.get("_batch_notice_dismissed"):
+                pass  # banner not re-shown after dismiss; reset on Run Again
+
+        # ── Batch progress block (only when batch_mode is active) ──
+        if ss.batch_mode and ss.batch_plan and not ss.running:
+            _plan = ss.batch_plan
+            _cur = ss.batch_current
+            _total_batches = len(_plan)
+            _total_stocks = sum(len(b["stocks"]) for b in _plan)
+            _done_stocks = sum(len(b["stocks"]) for b in _plan[:_cur])
+            with st.container():
+                st.markdown(f"**Batch group:** `{ss.batch_group_id}` — {_total_batches} batches, {_total_stocks:,} stocks total")
+                _lines = []
+                for i, b in enumerate(_plan):
+                    if i < _cur:
+                        _lines.append(f"  ✓ Batch {b['index']} of {_total_batches}: {len(b['stocks'])} stocks — complete")
+                    elif i == _cur:
+                        _lines.append(f"  → Batch {b['index']} of {_total_batches}: {len(b['stocks'])} stocks — current")
+                    else:
+                        _lines.append(f"  ○ Batch {b['index']} of {_total_batches}: {len(b['stocks'])} stocks — pending")
+                st.markdown("```\n" + "\n".join(_lines) + "\n```")
+                st.caption(f"Overall progress: {_done_stocks:,} of {_total_stocks:,} stocks completed in this batch group.")
+                _bcancel1, _bcancel2 = st.columns([1, 3])
+                with _bcancel1:
+                    if st.button("Cancel batch group", key="batch_cancel_btn", use_container_width=True):
+                        ss.batch_mode = False
+                        ss.batch_plan = []
+                        ss.batch_current = 0
+                        ss.batch_run_ids = []
+                        ss.batch_group_id = ""
+                        ss["_batch_notice_dismissed"] = False
+                        logger.info("User cancelled batch group")
+                        st.rerun()
 
         # ── Step 2: Speed ──
         st.markdown('<div class="sec">Step 2 - Choose Speed</div>', unsafe_allow_html=True)
@@ -232,7 +370,16 @@ def render(defaults, colors, selenium_ok):
             st.caption(f"Will process all {total_records:,} records" if process_limit == 0 else f"Will process first {process_limit:,} of {total_records:,}")
         with c3:
             can = total_records > 0 and selenium_ok and not ss.running and not ss.completed and not validation_error
-            start_btn = st.button("START SEARCH", use_container_width=True, disabled=not can, type="primary")
+            # In batch mode, label the start button "Start Batch X of Y" so the
+            # user knows which batch they're dispatching. Outside batch mode,
+            # keep the original label.
+            if ss.batch_mode and ss.batch_plan:
+                _bx = ss.batch_current + 1
+                _by = len(ss.batch_plan)
+                _btn_label = f"Start Batch {_bx} of {_by}"
+            else:
+                _btn_label = "START SEARCH"
+            start_btn = st.button(_btn_label, use_container_width=True, disabled=not can, type="primary")
             if not selenium_ok:
                 st.caption("Selenium not installed")
         with c4:
@@ -264,13 +411,36 @@ def render(defaults, colors, selenium_ok):
         if not ss.running and not ss.completed:
             status_ph.markdown(f'<div class="sbox">{total_records:,} records ready to process</div>', unsafe_allow_html=True)
             log_ph.markdown(render_log([]), unsafe_allow_html=True)
-        if start_btn and not ss.running and not ss.completed:
+        # auto_start_batch is set when the user clicks "Next batch" on a
+        # completion screen; it triggers the next run_scraper call on
+        # rerun without requiring a second Start click.
+        _should_start = (start_btn or ss.get("auto_start_batch", False)) and not ss.running and not ss.completed
+        if _should_start:
+            ss.auto_start_batch = False
             try:
-                run_scraper(
-                    file_bytes, num_bots, process_limit, target_url, priority_targets, blacklisted_companies,
-                    ss.stop_flag, status_ph, progress_bar, m1_ph, m2_ph, m3_ph, m4_ph, m5_ph, stop_ph, log_ph,
-                    skip_recent=bool(skip_recent_chk),
-                )
+                if ss.batch_mode and ss.batch_plan:
+                    # Dispatch the current batch: synthesize an Excel containing
+                    # only the batch's stocks; override save_name; otherwise
+                    # use the normal run_scraper code path unchanged.
+                    _cur_batch = ss.batch_plan[ss.batch_current]
+                    _batch_bytes = _make_batch_excel_bytes(_cur_batch["stocks"])
+                    ss.custom_name = _cur_batch["save_name"]
+                    run_scraper(
+                        _batch_bytes, num_bots, 0, target_url, priority_targets, blacklisted_companies,
+                        ss.stop_flag, status_ph, progress_bar, m1_ph, m2_ph, m3_ph, m4_ph, m5_ph, stop_ph, log_ph,
+                        skip_recent=bool(skip_recent_chk),
+                    )
+                    # Capture the just-finished batch's run_id by looking it up
+                    # via save_name (no orchestrator change needed).
+                    rid = db_get_latest_run_id_for_save_name(_cur_batch["save_name"])
+                    if rid and rid not in ss.batch_run_ids:
+                        ss.batch_run_ids.append(rid)
+                else:
+                    run_scraper(
+                        file_bytes, num_bots, process_limit, target_url, priority_targets, blacklisted_companies,
+                        ss.stop_flag, status_ph, progress_bar, m1_ph, m2_ph, m3_ph, m4_ph, m5_ph, stop_ph, log_ph,
+                        skip_recent=bool(skip_recent_chk),
+                    )
                 st.rerun()
             except Exception as e:
                 ss.running = False
@@ -381,10 +551,113 @@ def render(defaults, colors, selenium_ok):
             st.info("All stocks were scraped recently — nothing to do. Disable smart-skip to re-run them.")
         else:
             st.error(f"No results found. Errors: {ss.errors:,} | Time: {int(elapsed)}s")
-        if st.button("Run Again", use_container_width=True, type="primary"):
-            for k, v in defaults.items():
-                ss[k] = v
-            ss.stop_flag.clear(); st.rerun()
+
+        # ── Phase B: batch-aware action buttons ──
+        # If we're in batch mode and more batches remain, show "Next batch" +
+        # "Stop batch group". On the final batch, surface the combined export
+        # buttons in addition to the per-batch downloads above.
+        if ss.batch_mode and ss.batch_plan:
+            _bx = ss.batch_current + 1
+            _by = len(ss.batch_plan)
+            _has_more = _bx < _by
+
+            if _has_more:
+                # More batches to run — show Next batch + Stop
+                _nb1, _nb2, _nb3 = st.columns([2, 1, 1])
+                with _nb1:
+                    if st.button(
+                        f"Next batch ({_bx + 1} of {_by})",
+                        key=f"next_batch_{ss.batch_current}",
+                        use_container_width=True, type="primary",
+                    ):
+                        logger.info("User clicked Next batch: advancing from %d to %d (group=%s)",
+                                    ss.batch_current, ss.batch_current + 1, ss.batch_group_id)
+                        ss.batch_current += 1
+                        _reset_per_run_state(defaults)
+                        ss.auto_start_batch = True  # triggers run on rerun
+                        st.rerun()
+                with _nb2:
+                    if st.button("Stop batch group", key="batch_stop_group", use_container_width=True):
+                        logger.info("User stopped batch group after batch %d/%d", _bx, _by)
+                        ss.batch_mode = False
+                        ss.batch_plan = []
+                        ss.batch_current = 0
+                        ss.batch_group_id = ""
+                        ss["_batch_notice_dismissed"] = False
+                        st.rerun()
+            else:
+                # Final batch completed — surface combined exports
+                st.markdown('<div class="sec">Combined Batch Group Exports</div>', unsafe_allow_html=True)
+                st.success(
+                    f"All {_by} batches complete. Combined exports below aggregate results "
+                    f"from {len(ss.batch_run_ids)} batch run(s)."
+                )
+                try:
+                    _combined_data = db_get_results_for_run_ids(ss.batch_run_ids)
+                    _combined_failed = db_get_failed_stocks_for_run_ids(ss.batch_run_ids)
+                except Exception:
+                    logger.exception("Failed to load combined batch results")
+                    _combined_data = []
+                    _combined_failed = []
+
+                _cb1, _cb2, _cb3 = st.columns(3)
+                _group_label = f"{(ss.get('custom_name','').split('_batch_')[0] or 'batch_group')}_combined_{ss.batch_group_id}"
+                with _cb1:
+                    _cxlsx, _, _, _ = build_excel(_combined_data, priority_targets, blacklisted_companies)
+                    if _cxlsx:
+                        st.download_button(
+                            f"Download Combined Excel ({len(_combined_data):,} rows)",
+                            data=_cxlsx,
+                            file_name=f"{_group_label}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                        )
+                with _cb2:
+                    _ccsv = build_csv(_combined_data, priority_targets, blacklisted_companies)
+                    if _ccsv:
+                        st.download_button(
+                            f"Download Combined CSV ({len(_combined_data):,} rows)",
+                            data=_ccsv,
+                            file_name=f"{_group_label}.csv",
+                            mime="text/csv",
+                            use_container_width=True,
+                        )
+                with _cb3:
+                    _cjson = build_json(_combined_data, priority_targets, blacklisted_companies)
+                    if _cjson:
+                        st.download_button(
+                            f"Download Combined JSON ({len(_combined_data):,} rows)",
+                            data=_cjson,
+                            file_name=f"{_group_label}.json",
+                            mime="application/json",
+                            use_container_width=True,
+                        )
+
+                if _combined_failed:
+                    _cfx = build_failed_excel(_combined_failed)
+                    if _cfx:
+                        st.download_button(
+                            f"Download All Failed Stocks ({len(_combined_failed):,})",
+                            data=_cfx,
+                            file_name=f"{_group_label}_ALL_FAILED.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            help="Stocks that did not produce a result across all batches in this group.",
+                        )
+
+                if st.button("Start a new file", key="batch_start_new", use_container_width=True, type="primary"):
+                    # Full reset including batch state
+                    for k, v in defaults.items():
+                        ss[k] = v
+                    ss.stop_flag.clear()
+                    st.rerun()
+
+        # Non-batch (single-run) flow gets the standard Run Again button
+        if not ss.batch_mode:
+            if st.button("Run Again", use_container_width=True, type="primary"):
+                for k, v in defaults.items():
+                    ss[k] = v
+                ss.stop_flag.clear(); st.rerun()
     if ss.run_history:
         with st.expander(f"Run History ({len(ss.run_history)} runs)", expanded=False):
             for i, h in enumerate(reversed(ss.run_history)):
