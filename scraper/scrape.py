@@ -46,10 +46,10 @@ _MI_MIN_CELLS = 13  # need at least up to col 12 (Action Date)
 
 def _select_best_price_row(candidates):
     """Given a list of (price_str, date_str) tuples, return the one with the
-    most recent Action Date. Ties broken by highest numeric price. Returns
-    ("", "") for an empty input. Unparseable dates sort to the oldest.
-    Unparseable prices count as 0.0 for tie-breaking but are still returned
-    as their original string."""
+    highest numeric Unit Price. Among rows tied on the highest price, the
+    most recent Action Date wins. Returns ("", "") for an empty input.
+    Unparseable dates sort to the oldest. Unparseable prices count as 0.0
+    when ranking but are still returned in their original string form."""
     if not candidates:
         return "", ""
     parsed = []
@@ -63,8 +63,8 @@ def _select_best_price_row(candidates):
         except Exception:
             num = 0.0
         parsed.append((dt, num, price_str, date_str))
-    # Most recent date first; among same-date rows, highest price first.
-    parsed.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    # Highest price first; among same-price rows, most recent date first.
+    parsed.sort(key=lambda x: (x[1], x[0]), reverse=True)
     _, _, price_str, date_str = parsed[0]
     return price_str, date_str
 
