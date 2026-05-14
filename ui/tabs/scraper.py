@@ -161,6 +161,24 @@ def render(defaults, colors, selenium_ok):
         elif total_records == 0 and not ss.running and not ss.completed:
             st.error("File Rejected: Stock numbers must start from Row 2 in Column A")
 
+        # ── Large-file recommendation (Phase A — informational only) ──
+        # No actual batching yet. When the file exceeds 1,000 rows, surface
+        # a soft notice recommending the user split into batches of 500.
+        # The empirical sweet spot from the 499-NSN test is ~1 h 22 m at 3
+        # bots; runs much larger than that compound the risk of mid-run
+        # browser disconnects, accumulated dead-driver budget exhaustion,
+        # and unwieldy single-shot exports.
+        if total_records > 1000 and not ss.running and not ss.completed:
+            _suggested_batches = (total_records + 499) // 500
+            st.info(
+                f"**Large file detected — {total_records:,} rows.** "
+                f"For stability, we recommend processing in **{_suggested_batches} batches of ~500 rows** "
+                f"(the empirically-validated sweet spot at 3 bots, ~1 h 22 m per batch). "
+                f"You can still continue with a single run, but expect roughly "
+                f"{total_records // 60} minutes of wall-clock and higher risk of mid-run failures. "
+                f"Batch-split UI is planned for a future release; for now, split the file manually if you want."
+            )
+
         # ── Step 2: Speed ──
         st.markdown('<div class="sec">Step 2 - Choose Speed</div>', unsafe_allow_html=True)
         if "num_bots" not in ss:
