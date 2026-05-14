@@ -180,6 +180,12 @@ def render(defaults, colors, selenium_ok):
             "medium": {"b": _b_medium, "l": "Faster",      "e": "⚡",            "d": f"{_b_medium} bot{'s' if _b_medium>1 else ''} - quicker"},
             "fast":   {"b": _b_fast,   "l": "Maximum",     "e": "\U0001f680",        "d": f"{_b_fast} bot{'s' if _b_fast>1 else ''} - full power"},
         }
+        # Defensive: re-derive num_bots from the current preset every render.
+        # Streamlit's session_state persists ss.num_bots across reruns, so a
+        # value cached when DH_MAX_BOTS was higher can leak forward (e.g.
+        # ss.num_bots=3 after the operator lowers DH_MAX_BOTS to 2). The
+        # active preset is the source of truth; num_bots is derived.
+        ss.num_bots = spm.get(ss.speed_mode, spm["safe"])["b"]
         s1, s2, s3, s4 = st.columns(4)
         for col, mk in zip([s1, s2, s3, s4], ["slow", "safe", "medium", "fast"]):
             m = spm[mk]; sel = mk == ss.speed_mode
