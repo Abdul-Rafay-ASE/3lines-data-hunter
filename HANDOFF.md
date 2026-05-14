@@ -215,7 +215,7 @@ default and the explanation around it.
   surfaces it. The intrinsic-failure branch of the retry path is
   exercised on every run that includes this NSN.
 
-### Two follow-up commits this session
+### Three follow-up commits this session
 
 - **`6d0433c`** — Counter clarification. STATIC_BLACKLIST hits now
   roll into the visible "Blacklisted Entries" counter (previously
@@ -226,26 +226,75 @@ default and the explanation around it.
   Streamlit sessions, `ss.num_bots` retained the old value until the
   user clicked a preset, leaking forward as a 3-bot run when the cap
   was set to 2. Six-line defensive fix in `ui/tabs/scraper.py`.
+- **`6762dea`** — Unit Price + Action Date extraction from lqlite's
+  Management Information KeyTable (separate table from the Part
+  Information rows the existing parser scans). Multiple price rows
+  resolved by "most-recent Action Date, tie-break highest". New
+  columns inserted between Stock Number and the P.NO/MFG chain in
+  Excel/CSV/JSON. Old DB rows lacking the keys render as blank cells.
+  Also committed two developer diagnostic tools at `scripts/`.
+
+### Large-data findings (2026-05-14, 499 NSNs at 3 bots)
+
+First sustained long-running test. The single biggest validation pass
+since Phase 4. All measurements end-to-end on a real 499-NSN file.
+
+| Metric                          | Value                       |
+|---------------------------------|-----------------------------|
+| Elapsed                         | **1 h 22 m 44 s**           |
+| Processed (`ok`)                | 488                         |
+| Terminal failures (`dead`)      | 11                          |
+| Dead-drivers during main pass   | 14                          |
+| Retry pass recovered            | 3 / 14                      |
+| Per-stock effective             | ~10.2 s (incl. price extr.) |
+| Chrome RSS over the run         | 310–500 MB, oscillating     |
+| RSS upward drift                | none (no memory leak)       |
+| `database is locked` errors     | 0 across 499 writes         |
+| Duplicate run_progress entries  | 0                           |
+| Price extraction rate           | **482 / 488 ok = 98.8 %**   |
+| Highest captured Unit Price     | $893.07 (MICHELIN tire)     |
+| Newest captured Action Date     | Oct-01-2025 (most stocks)   |
+
+**FSC-correlated terminal failures:** of the 11 unrecoverable stocks,
+7 are FSC 5331 (seals/gaskets), 3 are FSC 6135 (batteries), 1 is
+FSC 6240 (lighting). The shared trait is slow-loading lqlite result
+pages for these categories — Selenium hits `DH_PER_STOCK_TIMEOUT=60`
+and aborts. Not an app bug; reflects lqlite's per-category performance.
+The previously-known `5331006413407` is among them. **Operators should
+expect a small population of FSC-5331 / 6135 / 6240 NSNs to land in
+the failed-stocks export on any real batch.**
+
+### Five previously-pending paths now empirically validated
+
+- ✅ **Long-running stability** (>1 h continuous). No instability.
+- ✅ **Chrome memory growth over hundreds of navigations.** RSS
+  oscillates within a healthy range; no leak. Chrome's GC keeps up.
+- ✅ **SQLite under sustained 3-worker writes** (499 stocks). Zero
+  contention, zero duplicates.
+- ✅ **Retry pass at non-trivial scale.** 14 candidates, 3 recovered.
+  The "<50 %"-failure guardrail correctly allowed the retry to run.
+- ✅ **Price extraction at scale.** 98.8 % of successful scrapes
+  populated `Unit Price` + `Action Date`; failures degrade gracefully
+  to empty strings.
 
 ### Still NOT validated
 
 - **10-bot run.** Skipped after 6-bot confirmed contention saturation.
   Empirically would almost certainly be slower than 6 with more
   dead-drivers; not worth the test time.
-- **Very large batches (500+ stocks).** Memory growth over many
-  navigations per Chrome instance is theoretical; no real data yet.
-- **Failed-stocks Excel export under real concurrency-induced failures.**
-  The 6-bot run produced one terminal failed stock that the export
-  should surface. Manual UI check pending.
+- **Failed-stocks Excel export UI** at 11+ failed entries. End-to-end
+  worked; the manual download-button visual check is the last gap.
+- **Very-very-large batches (5,000+ stocks).** Not tested. The 500
+  run's per-stock rate would extrapolate to roughly 14 hours of
+  wall-clock for 5 k stocks at 3 bots — would need batching or
+  background-job mode for practical use at that scale.
 
-### One known terminal NSN (catalog-side issue)
+### Known terminal NSNs (catalog-side issues, surface via failed-stocks)
 
-- **`5331006413407`** — fails on lqlite.com regardless of bot count
-  (1, 3, or 6) and is not recoverable by the retry pass. The result
-  page presumably never finishes loading; Selenium hits
-  `DH_PER_STOCK_TIMEOUT=60` and aborts. Filed under "known issue,
-  surfaces correctly via failed-stocks export". No fix possible from
-  our side without lqlite-side investigation.
+7 in FSC 5331, 3 in FSC 6135, 1 in FSC 6240 — listed in
+`run_progress` for run `run_20260514_123321` with `status='dead'`.
+No fix possible from our side without lqlite-side investigation;
+operators should treat them as expected residue.
 
 ---
 
